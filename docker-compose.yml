@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Expo Application
+  cardano-dapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cardano-dapp
+    ports:
+      - "19000:19000"
+      - "19001:19001"
+      - "19002:19002"
+      - "8081:8081"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - REACT_NATIVE_PACKAGER_HOSTNAME=localhost
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+    # If you need to link to Masumi services, you can add environment variables here
+    # e.g., API_URL=http://masumi-payment:3001
+
+  # PostgreSQL Database for Masumi Services
+  masumi-postgres:
+    image: postgres:16-alpine
+    container_name: masumi-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: masumi_payment
+    ports:
+      - "5432:5432"
+    volumes:
+      - masumi-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Masumi Payment Service
+  masumi-payment:
+    build:
+      context: ../masumi-payment-service
+      dockerfile: Dockerfile
+    container_name: masumi-payment-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - NETWORK=Preprod
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:password@masumi-postgres:5432/masumi_payment?schema=public
+      - ENCRYPTION_KEY=12345678901234567890123456789012
+      - BLOCKFROST_API_KEY_PREPROD=preprodHdxaAUbZjQOeUD8YCt421BV4E19zvEno
+      - CARDANO_NETWORK=preprod
+      - ADMIN_KEY=rdm_admin_key_secure_change_me
+    depends_on:
+      masumi-postgres:
+        condition: service_healthy
+    volumes:
+      - ../masumi-payment-service:/usr/src/app
+      - /usr/src/app/node_modules
+
+  # Masumi Registry Service
+  masumi-registry:
+    build:
+      context: ../masumi-registry-service
+      dockerfile: Dockerfile
+    container_name: masumi-registry-service
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NETWORK=Preprod
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:password@masumi-postgres:5432/masumi_registry?schema=public
+      - BLOCKFROST_API_KEY_PREPROD=preprodHdxaAUbZjQOeUD8YCt421BV4E19zvEno
+      - PAYMENT_SERVICE_URL=http://masumi-payment:3001/api/v1
+      - ADMIN_KEY=rdm_admin_key_secure_change_me
+    depends_on:
+      - masumi-payment
+    volumes:
+      - ../masumi-registry-service:/usr/src/app
+      - /usr/src/app/node_modules
+
+volumes:
+  masumi-postgres-data:
