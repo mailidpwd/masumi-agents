@@ -14,6 +14,8 @@ import {
   ScrollView,
   Modal,
   Platform,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -21,6 +23,7 @@ import { WalletService } from '../services/walletService';
 import { WalletInfo } from '../types/cardano';
 import { CardanoNetwork, getNetworkConfig, getDefaultNetwork } from '../services/networkConfig';
 import { Linking } from 'react-native';
+import * as LinkingExpo from 'expo-linking';
 import * as ClipboardExpo from 'expo-clipboard';
 
 interface WalletConnectionProps {
@@ -28,9 +31,41 @@ interface WalletConnectionProps {
 }
 
 const WALLET_OPTIONS = [
-  { id: 'eternl', name: 'Eternl', icon: 'wallet-outline', deepLink: 'eternl://', color: '#00D4AA' },
-  { id: 'nami', name: 'Nami', icon: 'wallet', deepLink: 'nami://', color: '#349EA3' },
-  { id: 'flint', name: 'Flint', icon: 'wallet-plus', deepLink: 'flintwallet://', color: '#FF6B35' },
+  { 
+    id: 'eternl', 
+    name: 'Eternl', 
+    icon: 'wallet-outline', 
+    deepLink: 'eternl://', 
+    deepLinkAlternatives: ['eternlwallet://', 'eternl://wallet', 'eternl://open'],
+    // Eternl uses dapp deep link format: eternl://dapp?json=ENCODED_REQUEST
+    useDappFormat: true,
+    color: '#00D4AA',
+    appStoreUrl: Platform.OS === 'ios' 
+      ? 'https://apps.apple.com/app/eternl/id1609554963'
+      : 'https://play.google.com/store/apps/details?id=com.eternl.wallet',
+  },
+  { 
+    id: 'nami', 
+    name: 'Nami', 
+    icon: 'wallet', 
+    deepLink: 'nami://', 
+    deepLinkAlternatives: ['namiwallet://', 'nami://wallet'],
+    color: '#349EA3',
+    appStoreUrl: Platform.OS === 'ios'
+      ? 'https://apps.apple.com/app/nami-wallet/id1598883493'
+      : 'https://play.google.com/store/apps/details?id=app.nami',
+  },
+  { 
+    id: 'flint', 
+    name: 'Flint', 
+    icon: 'wallet-plus', 
+    deepLink: 'flintwallet://', 
+    deepLinkAlternatives: ['flint://', 'flintwallet://wallet'],
+    color: '#FF6B35',
+    appStoreUrl: Platform.OS === 'ios'
+      ? 'https://apps.apple.com/app/flint-wallet/id1598883493'
+      : 'https://play.google.com/store/apps/details?id=com.flintwallet.mobile',
+  },
 ];
 
 export const WalletConnection: React.FC<WalletConnectionProps> = ({
@@ -42,7 +77,9 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   const [showWebView, setShowWebView] = useState(false);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualAddress, setManualAddress] = useState('');
+  const [waitingForWallet, setWaitingForWallet] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
     // Load saved network preference
@@ -55,12 +92,136 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
     // Check if wallet is already connected
     const checkConnection = async () => {
       const connectedWallet = await WalletService.getConnectedWallet();
-    if (connectedWallet) {
-      onWalletConnected?.(connectedWallet);
-    }
+      if (connectedWallet) {
+        onWalletConnected?.(connectedWallet);
+      }
     };
     checkConnection();
-  }, [onWalletConnected]);
+
+    // Listen for deep link URLs (when wallet app redirects back)
+    const subscription = LinkingExpo.addEventListener('url', handleDeepLink);
+    
+    // Listen for app state changes (when app comes back to foreground)
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Check for initial URL (when app opens via deep link)
+    LinkingExpo.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      appStateSubscription.remove();
+    };
+  }, [onWalletConnected, selectedNetwork]);
+
+  const handleDeepLink = async (event: { url: string }) => {
+    try {
+      const { queryParams, path } = LinkingExpo.parse(event.url);
+      
+      console.log('Received deep link:', event.url);
+      console.log('Parsed path:', path);
+      console.log('Parsed queryParams:', queryParams);
+      
+      // Handle Eternl callback: cardanodapp://wallet/eternl-callback?session=...
+      if (path === 'wallet/eternl-callback') {
+        const session = queryParams?.session as string;
+        const address = queryParams?.address as string;
+        const networkParam = queryParams?.network as string;
+        
+        if (address && (address.startsWith('addr_test1') || address.startsWith('addr1'))) {
+          // Eternl returned address - connect wallet
+          // Map network string to CardanoNetwork type
+          let walletNetwork: CardanoNetwork = selectedNetwork;
+          if (networkParam === 'testnet' || networkParam === 'preprod') {
+            walletNetwork = 'preprod';
+          } else if (networkParam === 'mainnet') {
+            walletNetwork = 'mainnet';
+          }
+          
+          const walletInfo: WalletInfo = {
+            address: address,
+            network: walletNetwork,
+            isConnected: true,
+            walletName: 'eternl',
+          };
+
+          // Save connection
+          const AsyncStorage = await import('@react-native-async-storage/async-storage');
+          await AsyncStorage.default.setItem('@wallet:connection', JSON.stringify(walletInfo));
+          // Convert WalletInfo.network to CardanoNetwork type
+          const cardanoNetwork: CardanoNetwork = walletNetwork === 'mainnet' ? 'mainnet' : 'preprod';
+          await WalletService.setNetworkPreference(cardanoNetwork);
+          
+          // Set connected wallet
+          (WalletService as any).connectedWallet = walletInfo;
+
+          setWaitingForWallet(false);
+          setIsConnecting(false);
+          onWalletConnected?.(walletInfo);
+          Alert.alert('Connected!', `Successfully connected to Eternl wallet on ${walletInfo.network === 'preprod' ? 'PreProd Testnet' : 'Mainnet'}!`);
+          return;
+        }
+        
+        if (session) {
+          // Store session for future use
+          console.log('Eternl session received:', session);
+          Alert.alert('✅ Connected!', 'Eternl wallet connected. Please enter your address manually to complete setup.');
+          setWaitingForWallet(false);
+          setIsConnecting(false);
+          setShowManualEntry(true);
+          return;
+        }
+      }
+      
+      // Handle wallet connection callback (generic)
+      if (queryParams?.address) {
+        const address = decodeURIComponent(queryParams.address as string);
+        if (address.startsWith('addr_test1') || address.startsWith('addr1')) {
+          setManualAddress(address);
+          setWaitingForWallet(false);
+          setShowManualEntry(true);
+        }
+      }
+      
+      // Handle transaction signing callback
+      if (path === 'wallet/signed' && queryParams?.requestId) {
+        const signResult = await WalletService.handleSigningCallback(event.url);
+        if (signResult?.success && signResult.signedTx) {
+          Alert.alert(
+            ' Transaction Signed',
+            'Your transaction has been signed successfully!',
+            [{ text: 'OK' }]
+          );
+          // Optionally submit the transaction here
+          // await WalletService.submitTransaction(signResult.signedTx);
+        } else {
+          Alert.alert(
+            'Signing Failed',
+            signResult?.error || 'Failed to sign transaction',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error handling deep link:', error);
+    }
+  };
+
+  const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+    if (
+      appStateRef.current.match(/inactive|background/) &&
+      nextAppState === 'active' &&
+      waitingForWallet
+    ) {
+      // App has come to the foreground, check clipboard
+      await checkClipboardForAddress();
+      setWaitingForWallet(false);
+    }
+    appStateRef.current = nextAppState;
+  };
 
   // Auto-detect clipboard when app comes back to foreground
   const checkClipboardForAddress = async () => {
@@ -126,19 +287,163 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   };
 
   const handleConnect = async () => {
-    // For mobile apps, directly show manual entry with instructions
-    Alert.alert(
-      'Connect Mobile Wallet',
-      `To connect your ${selectedWallet.charAt(0).toUpperCase() + selectedWallet.slice(1)} mobile wallet:\n\n1. Open your ${selectedWallet} app\n2. Go to "Receive" section\n3. Copy your ${selectedNetwork === 'preprod' ? 'PreProd Testnet' : 'Mainnet'} address\n4. Paste it in the manual entry form`,
-      [
-        { 
-          text: 'Enter Address Manually', 
-          onPress: () => setShowManualEntry(true),
-          style: 'default'
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    if (Platform.OS === 'web') {
+      // For web, use WebView
+      setShowWebView(true);
+      return;
+    }
+
+    setIsConnecting(true);
+    const walletOption = WALLET_OPTIONS.find(w => w.id === selectedWallet);
+    
+    if (!walletOption) {
+      setIsConnecting(false);
+      return;
+    }
+
+    // Use Eternl's dapp deep link format for automatic connection
+    // This requires a Development Build (not Expo Go)
+    try {
+      if (walletOption.useDappFormat && walletOption.id === 'eternl') {
+        const dappRequest = {
+          type: 'connect',
+          dappName: 'RDM Ecosystem',
+          callback: 'cardanodapp://wallet/eternl-callback',
+          network: selectedNetwork === 'preprod' ? 'testnet' : 'mainnet',
+        };
+        
+        const encodedRequest = encodeURIComponent(JSON.stringify(dappRequest));
+        
+        // Try multiple URL schemes in order
+        const urlSchemes = [
+          `eternl://dapp?json=${encodedRequest}`, // Eternl dapp format
+          `eternlwallet://dapp?json=${encodedRequest}`, // Alternative scheme
+        ];
+        
+        // Also try just opening the app (Android package name approach)
+        const androidPackageUrl = Platform.OS === 'android' 
+          ? 'intent://#Intent;package=com.eternl.wallet;scheme=eternl;end'
+          : null;
+        
+        let opened = false;
+        let lastError: any = null;
+        
+        // First, try the dapp format URLs
+        for (const deepLinkUrl of urlSchemes) {
+          try {
+            console.log('Trying to open Eternl with:', deepLinkUrl);
+            await Linking.openURL(deepLinkUrl);
+            console.log('Successfully opened Eternl with:', deepLinkUrl);
+            opened = true;
+            break;
+          } catch (error) {
+            console.log('Failed with scheme:', deepLinkUrl, error);
+            lastError = error;
+            // Continue to next scheme
+          }
+        }
+        
+        // If dapp format failed, try opening the app directly (Android)
+        if (!opened && androidPackageUrl && Platform.OS === 'android') {
+          try {
+            console.log('Trying Android Intent URL:', androidPackageUrl);
+            await Linking.openURL(androidPackageUrl);
+            console.log('Opened Eternl app directly');
+            opened = true;
+          } catch (error) {
+            console.log('Failed with Android Intent:', error);
+            lastError = error;
+          }
+        }
+        
+        // Last resort: try simple schemes
+        if (!opened) {
+          const simpleSchemes = ['eternl://', 'eternlwallet://'];
+          for (const scheme of simpleSchemes) {
+            try {
+              console.log('Trying simple scheme:', scheme);
+              await Linking.openURL(scheme);
+              console.log('Opened Eternl with simple scheme');
+              opened = true;
+              break;
+            } catch (error) {
+              console.log('Failed with simple scheme:', scheme, error);
+              lastError = error;
+            }
+          }
+        }
+        
+        if (opened) {
+          // Set waiting state - Eternl will callback with address automatically
+          setWaitingForWallet(true);
+          
+          Alert.alert(
+            'Opening Eternl...',
+            'Please approve the connection in Eternl wallet. Your address will be automatically connected.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {},
+              },
+            ],
+            { cancelable: false }
+          );
+        }
+        
+        if (!opened) {
+          console.error('Failed to open Eternl with any scheme:', lastError);
+          setIsConnecting(false);
+          Alert.alert(
+            'Cannot Open Eternl',
+            'Eternl app may not be installed or the URL scheme is not supported.\n\nPlease:\n1. Make sure Eternl wallet is installed\n2. Open Eternl manually and copy your address\n3. Paste it here to connect',
+            [
+              {
+                text: 'Enter Address Manually',
+                onPress: () => {
+                  setShowManualEntry(true);
+                  setIsConnecting(false);
+                },
+                style: 'default',
+              },
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => setIsConnecting(false),
+              },
+            ]
+          );
+        }
+      } else {
+        // For other wallets, use simple deep link
+        try {
+          await Linking.openURL(walletOption.deepLink);
+          setWaitingForWallet(true);
+        } catch (error) {
+          console.error('Failed to open wallet:', error);
+          setIsConnecting(false);
+          setShowManualEntry(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error opening wallet:', error);
+      setIsConnecting(false);
+      Alert.alert(
+        'Error',
+        'Could not open wallet app. Please enter your address manually.',
+        [
+          {
+            text: 'Enter Manually',
+            onPress: () => {
+              setShowManualEntry(true);
+            },
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    }
   };
 
   const handleManualConnect = async () => {
@@ -464,38 +769,78 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
       </View>
 
       <View style={styles.actionSection}>
-        {/* Main Easy Connect Button */}
+        {/* Main Connect Button */}
         <TouchableOpacity
           style={styles.easyConnectButton}
-          onPress={async () => {
-            // First check if there's already an address in clipboard
-            await checkClipboardForAddress();
-          }}
+          onPress={handleConnect}
           disabled={isConnecting}
         >
-          <MaterialCommunityIcons name="content-paste" size={28} color="#FFFFFF" />
+          {isConnecting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <MaterialCommunityIcons name="wallet" size={28} color="#FFFFFF" />
+          )}
           <View style={styles.easyConnectTextContainer}>
-            <Text style={styles.easyConnectButtonText}>Connect from Clipboard</Text>
-            <Text style={styles.easyConnectSubtext}>Copy address in Eternl, then tap here</Text>
+            <Text style={styles.easyConnectButtonText}>
+              {isConnecting ? 'Connecting...' : `Connect ${WALLET_OPTIONS.find(w => w.id === selectedWallet)?.name || 'Wallet'}`}
+            </Text>
+            <Text style={styles.easyConnectSubtext}>
+              {isConnecting 
+                ? 'Opening wallet app...' 
+                : `Tap to open ${WALLET_OPTIONS.find(w => w.id === selectedWallet)?.name || 'wallet'} and connect`}
+            </Text>
           </View>
         </TouchableOpacity>
 
         {/* Step by step guide */}
+        {waitingForWallet && (
+          <View style={[styles.stepsContainer, styles.waitingContainer]}>
+            <ActivityIndicator size="small" color="#00D4AA" />
+            <Text style={styles.waitingText}>Waiting for you to return from wallet app...</Text>
+          </View>
+        )}
+        
+        {/* Development Build Notice */}
+        {Platform.OS !== 'web' && (
+          <View style={styles.devBuildNotice}>
+            <MaterialCommunityIcons name="information" size={20} color="#F59E0B" />
+            <Text style={styles.devBuildNoticeText}>
+              <Text style={{fontWeight: 'bold'}}>Note:</Text> Automatic connection requires a Development Build (not Expo Go). Manual entry works in all builds.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.stepsContainer}>
-          <Text style={styles.stepsTitle}>Quick Steps:</Text>
+          <Text style={styles.stepsTitle}>How to Connect:</Text>
           <View style={styles.stepRow}>
             <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
-            <Text style={styles.stepText}>Open <Text style={{fontWeight: 'bold', color: '#00D4AA'}}>Eternl</Text> app</Text>
+            <Text style={styles.stepText}>Tap "Connect" button above</Text>
           </View>
           <View style={styles.stepRow}>
             <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
-            <Text style={styles.stepText}>Go to <Text style={{fontWeight: 'bold'}}>Receive</Text> → Copy address</Text>
+            <Text style={styles.stepText}>Your <Text style={{fontWeight: 'bold', color: WALLET_OPTIONS.find(w => w.id === selectedWallet)?.color || '#00D4AA'}}>{WALLET_OPTIONS.find(w => w.id === selectedWallet)?.name || 'wallet'}</Text> app will open</Text>
           </View>
           <View style={styles.stepRow}>
             <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
-            <Text style={styles.stepText}>Come back here → Tap button above</Text>
+            <Text style={styles.stepText}>Approve the connection in {WALLET_OPTIONS.find(w => w.id === selectedWallet)?.name || 'wallet'}</Text>
+          </View>
+          <View style={styles.stepRow}>
+            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>4</Text></View>
+            <Text style={styles.stepText}>Your address will be automatically connected!</Text>
           </View>
         </View>
+
+        {/* Alternative: Connect from Clipboard */}
+        <TouchableOpacity
+          style={styles.clipboardButton}
+          onPress={async () => {
+            await checkClipboardForAddress();
+          }}
+          disabled={isConnecting}
+        >
+          <MaterialCommunityIcons name="content-paste" size={20} color="#0033AD" />
+          <Text style={styles.clipboardButtonText}>Or Connect from Clipboard</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.manualEntryButton}
@@ -1092,5 +1437,53 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     flex: 1,
+  },
+  waitingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#E0F2FE',
+    borderColor: '#7DD3FC',
+  },
+  waitingText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0369A1',
+  },
+  clipboardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#E0E7FF',
+    gap: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#0033AD',
+  },
+  clipboardButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0033AD',
+  },
+  devBuildNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  devBuildNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 18,
   },
 });

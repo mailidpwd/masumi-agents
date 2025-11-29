@@ -1,7 +1,14 @@
-import { WalletInfo, WalletConnectionResult } from '../types/cardano';
-import { Linking, Platform } from 'react-native';
+import { 
+  WalletInfo, 
+  WalletConnectionResult,
+  SignTransactionRequest,
+  SignTransactionResult,
+  SubmitTransactionResult,
+} from '../types/cardano';
+import { Linking, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CardanoNetwork, getNetworkConfig, getDefaultNetwork, validateAddressForNetwork } from './networkConfig';
+import * as LinkingExpo from 'expo-linking';
 
 const NETWORK_PREFERENCE_KEY = '@wallet:network_preference';
 const WALLET_CONNECTION_KEY = '@wallet:connection';
@@ -386,6 +393,296 @@ export class WalletService {
    */
   static getWalletAPI(): any {
     return this.walletAPI;
+  }
+
+  /**
+   * Signs a transaction using the connected wallet
+   * For mobile wallets, opens the wallet app for signing
+   * For WebView wallets, uses CIP-30 API directly
+   */
+  static async signTransaction(
+    request: SignTransactionRequest
+  ): Promise<SignTransactionResult> {
+    if (!this.connectedWallet) {
+      return {
+        success: false,
+        error: 'No wallet connected. Please connect your wallet first.',
+      };
+    }
+
+    try {
+      // Check if we're in a WebView context with CIP-30 wallet API
+      const isWebView = typeof window !== 'undefined' && this.walletAPI;
+      
+      if (isWebView && this.walletAPI) {
+        return await this.signTransactionViaCIP30(request);
+      }
+
+      // For mobile, use deep linking to open wallet app
+      return await this.signTransactionViaMobile(request);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to sign transaction',
+      };
+    }
+  }
+
+  /**
+   * Signs transaction via CIP-30 API (WebView context)
+   */
+  private static async signTransactionViaCIP30(
+    request: SignTransactionRequest
+  ): Promise<SignTransactionResult> {
+    try {
+      if (!this.walletAPI) {
+        throw new Error('Wallet API not available');
+      }
+
+      // Build transaction using CIP-30 API
+      // Note: This is a simplified version. Real implementation would use
+      // @cardano-foundation/cardano-connect-with-wallet or similar library
+      
+      // Get UTxOs from wallet
+      const utxos = await this.walletAPI.getUtxos();
+      if (!utxos || utxos.length === 0) {
+        throw new Error('No UTxOs available in wallet');
+      }
+
+      // Build transaction CBOR
+      // In a real implementation, you would use @emurgo/cardano-serialization-lib
+      // or similar to build the transaction properly
+      const txCbor = await this.buildTransactionCbor(request, utxos);
+
+      // Sign transaction
+      const signedTx = await this.walletAPI.signTx(txCbor, true); // true = partial sign
+
+      return {
+        success: true,
+        signedTx: signedTx,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to sign transaction via CIP-30',
+      };
+    }
+  }
+
+  /**
+   * Signs transaction via mobile wallet (deep linking)
+   */
+  private static async signTransactionViaMobile(
+    request: SignTransactionRequest
+  ): Promise<SignTransactionResult> {
+    try {
+      const walletName = this.connectedWallet?.walletName || 'eternl';
+      const walletUrl = this.getWalletUrl(walletName);
+
+      if (!walletUrl) {
+        throw new Error(`Wallet URL not found for ${walletName}`);
+      }
+
+      // Store transaction request temporarily for callback
+      const txRequestId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await AsyncStorage.setItem(`@wallet:tx_request:${txRequestId}`, JSON.stringify(request));
+
+      // Build transaction data for deep link
+      // Format: wallet://sign?tx=<base64_encoded_tx_data>&callback=cardanodapp://wallet/signed
+      const txData = {
+        inputs: request.inputs,
+        outputs: request.outputs,
+        metadata: request.metadata,
+        network: this.connectedWallet?.network,
+        requestId: txRequestId,
+      };
+
+      // Encode transaction data (simplified - real implementation would use proper CBOR encoding)
+      const encodedTxData = Buffer.from(JSON.stringify(txData)).toString('base64');
+
+      // Create deep link URL
+      // Note: Actual wallet deep link format may vary by wallet
+      // This is a generic format - adjust based on wallet documentation
+      const deepLinkUrl = `${walletUrl}sign?tx=${encodedTxData}&callback=cardanodapp://wallet/signed?requestId=${txRequestId}`;
+
+      // Check if wallet app can be opened
+      const canOpen = await Linking.canOpenURL(walletUrl);
+      if (!canOpen) {
+        // Wallet not installed - show alert
+        Alert.alert(
+          'Wallet App Required',
+          `Please install ${walletName} wallet app to sign transactions.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {},
+            },
+          ]
+        );
+        return {
+          success: false,
+          error: `Wallet app (${walletName}) not installed`,
+        };
+      }
+
+      // Open wallet app for signing
+      await Linking.openURL(deepLinkUrl);
+
+      // Return pending result - actual signing will be handled via callback
+      // In a real implementation, you would:
+      // 1. Wait for the callback URL with signed transaction
+      // 2. Extract signed transaction from callback
+      // 3. Return the signed transaction
+      
+      // For now, return a pending state
+      // The actual implementation would use a Promise that resolves when callback is received
+      return {
+        success: false,
+        error: 'Mobile signing requires callback handling. Transaction opened in wallet app.',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to open wallet for signing',
+      };
+    }
+  }
+
+  /**
+   * Builds transaction CBOR (simplified - real implementation needs proper Cardano library)
+   */
+  private static async buildTransactionCbor(
+    request: SignTransactionRequest,
+    utxos: any[]
+  ): Promise<string> {
+    // This is a placeholder - real implementation would use:
+    // @emurgo/cardano-serialization-lib or @cardano-foundation/cardano-multiplatform-lib
+    // to properly build the transaction CBOR
+    
+    // For now, return a mock CBOR structure
+    // In production, you would:
+    // 1. Select UTxOs to cover the outputs
+    // 2. Calculate fees
+    // 3. Build proper transaction structure
+    // 4. Serialize to CBOR
+    
+    console.warn('buildTransactionCbor: Using placeholder implementation. Install @emurgo/cardano-serialization-lib for real transaction building.');
+    
+    // Placeholder CBOR (this won't work in production)
+    return '84a30081825820' + '00'.repeat(32) + '01a20081825820' + '00'.repeat(28) + '01821a000f4240';
+  }
+
+  /**
+   * Submits a signed transaction to the Cardano network
+   */
+  static async submitTransaction(
+    signedTx: string
+  ): Promise<SubmitTransactionResult> {
+    if (!this.connectedWallet) {
+      return {
+        success: false,
+        error: 'No wallet connected',
+      };
+    }
+
+    try {
+      // Try to submit via wallet API first (CIP-30)
+      if (this.walletAPI && typeof this.walletAPI.submitTx === 'function') {
+        try {
+          const txHash = await this.walletAPI.submitTx(signedTx);
+          return {
+            success: true,
+            txHash: txHash,
+          };
+        } catch (walletError) {
+          console.warn('Wallet API submission failed, trying Blockfrost:', walletError);
+        }
+      }
+
+      // Fallback: Try to submit via Blockfrost (if they add support) or other service
+      // Note: Blockfrost doesn't currently support transaction submission
+      // You would need to use a different service or Cardano node
+      
+      return {
+        success: false,
+        error: 'Transaction submission not available. Use wallet API or Cardano node.',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to submit transaction',
+      };
+    }
+  }
+
+  /**
+   * Signs and submits a transaction in one call
+   * Opens wallet app for signing, then submits after signature
+   */
+  static async signAndSubmitTransaction(
+    request: SignTransactionRequest
+  ): Promise<SubmitTransactionResult> {
+    // Sign transaction
+    const signResult = await this.signTransaction(request);
+    
+    if (!signResult.success || !signResult.signedTx) {
+      return {
+        success: false,
+        error: signResult.error || 'Failed to sign transaction',
+      };
+    }
+
+    // Submit signed transaction
+    return await this.submitTransaction(signResult.signedTx);
+  }
+
+  /**
+   * Handles callback from wallet app after signing
+   * Called when wallet app redirects back with signed transaction
+   */
+  static async handleSigningCallback(url: string): Promise<SignTransactionResult | null> {
+    try {
+      const parsed = LinkingExpo.parse(url);
+      const requestId = parsed.queryParams?.requestId as string;
+      
+      if (!requestId) {
+        return null;
+      }
+
+      // Get original transaction request
+      const txRequestKey = `@wallet:tx_request:${requestId}`;
+      const txRequestJson = await AsyncStorage.getItem(txRequestKey);
+      
+      if (!txRequestJson) {
+        return {
+          success: false,
+          error: 'Transaction request not found',
+        };
+      }
+
+      // Get signed transaction from callback
+      const signedTx = parsed.queryParams?.signedTx as string;
+      
+      if (!signedTx) {
+        return {
+          success: false,
+          error: 'Signed transaction not found in callback',
+        };
+      }
+
+      // Clean up stored request
+      await AsyncStorage.removeItem(txRequestKey);
+
+      return {
+        success: true,
+        signedTx: signedTx,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to handle signing callback',
+      };
+    }
   }
 }
 
