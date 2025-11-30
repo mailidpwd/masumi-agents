@@ -9,6 +9,7 @@ import { Linking, Platform, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CardanoNetwork, getNetworkConfig, getDefaultNetwork, validateAddressForNetwork } from './networkConfig';
 import * as LinkingExpo from 'expo-linking';
+import { isExpoGo, FEATURES } from '../utils/featureFlags';
 
 const NETWORK_PREFERENCE_KEY = '@wallet:network_preference';
 const WALLET_CONNECTION_KEY = '@wallet:connection';
@@ -51,9 +52,19 @@ export class WalletService {
    * Attempts to connect to a real Cardano wallet
    * Uses WebView with cardano-connect-with-wallet or deep linking for mobile wallets
    * Defaults to PreProd testnet for development
+   * 
+   * In Expo Go: Only manual address entry is supported
    */
   static async connectWallet(walletName: string = 'nami', network: CardanoNetwork = getDefaultNetwork()): Promise<WalletConnectionResult> {
     try {
+      // Check if in Expo Go mode - only manual entry works
+      if (isExpoGo()) {
+        return {
+          success: false,
+          error: 'EXPO_GO_MODE: Please use manual address entry to connect your wallet.',
+        };
+      }
+
       // Check if we're in a WebView context with cardano API
       const isWebView = typeof window !== 'undefined' && (window as any).cardano;
       

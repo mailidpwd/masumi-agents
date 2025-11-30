@@ -1,0 +1,27 @@
+{
+  "validators": [
+    {
+      "title": "GoalPledgeLock",
+      "description": "Goal pledge locking and unlocking",
+      "compiledCode": "4e4d0100ff0000",
+      "hash": "placeholder_hash_goalpledgelock",
+      "version": "V2"
+    }
+  ],
+  "types": {
+    "TokenAmount": {
+      "ada": "Integer",
+      "rdmToken": "Maybe Integer"
+    },
+    "GoalPledgeDatum": {
+      "goalId": "BuiltinByteString",
+      "userId": "BuiltinByteString",
+      "pledgedAmount": "TokenAmount",
+      "lockUntil": "POSIXTime",
+      "createdAt": "POSIXTime"
+    },
+    "PledgeRedeemer": ["LockPledge", "UnlockPledge", "CancelPledge"]
+  },
+  "note": "This is a placeholder. Replace with actual compiled contract code after compilation."
+}
+

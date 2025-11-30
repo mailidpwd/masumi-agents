@@ -30,6 +30,7 @@ export const DUMMY_MENTORS: Mentor[] = [
     successRate: 89,
     rate: 50,
     avatarInitials: 'SC',
+    gender: 'female',
   },
   {
     id: 'm2',
@@ -41,6 +42,7 @@ export const DUMMY_MENTORS: Mentor[] = [
     successRate: 85,
     rate: 75,
     avatarInitials: 'MJ',
+    gender: 'male',
   },
   {
     id: 'm3',
@@ -52,6 +54,7 @@ export const DUMMY_MENTORS: Mentor[] = [
     successRate: 92,
     rate: 40,
     avatarInitials: 'ER',
+    gender: 'female',
   },
   {
     id: 'm4',
@@ -63,6 +66,7 @@ export const DUMMY_MENTORS: Mentor[] = [
     successRate: 87,
     rate: 60,
     avatarInitials: 'DK',
+    gender: 'male',
   },
   {
     id: 'm5',
@@ -74,6 +78,7 @@ export const DUMMY_MENTORS: Mentor[] = [
     successRate: 91,
     rate: 55,
     avatarInitials: 'PP',
+    gender: 'female',
   },
 ];
 
@@ -90,6 +95,7 @@ export const DUMMY_BUDDIES: HabitBuddy[] = [
     streak: 45,
     compatibility: 95,
     avatarInitials: 'AT',
+    gender: 'male',
   },
   {
     id: 'b2',
@@ -99,6 +105,7 @@ export const DUMMY_BUDDIES: HabitBuddy[] = [
     streak: 82,
     compatibility: 88,
     avatarInitials: 'PS',
+    gender: 'female',
   },
   {
     id: 'b3',
@@ -108,6 +115,7 @@ export const DUMMY_BUDDIES: HabitBuddy[] = [
     streak: 30,
     compatibility: 91,
     avatarInitials: 'JW',
+    gender: 'male',
   },
   {
     id: 'b4',
@@ -117,6 +125,7 @@ export const DUMMY_BUDDIES: HabitBuddy[] = [
     streak: 67,
     compatibility: 93,
     avatarInitials: 'MG',
+    gender: 'female',
   },
   {
     id: 'b5',
@@ -126,6 +135,7 @@ export const DUMMY_BUDDIES: HabitBuddy[] = [
     streak: 52,
     compatibility: 86,
     avatarInitials: 'CA',
+    gender: 'male',
   },
 ];
 

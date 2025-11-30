@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getRDMServices } from '../services/agentInitializer';
 import { LPPoolPair, LPInvestment, LPInvestorPosition } from '../types/liquidityPool';
 import { HabitNFT } from '../types/habitNFT';
-import { TokenAmount, DailyGoal } from '../types/rdm';
+import { TokenAmount, DailyGoal, PurseType } from '../types/rdm';
 
 interface LiquidityPoolDashboardProps {
   onNavigate?: (screen: string) => void;
@@ -237,7 +237,7 @@ export const LiquidityPoolDashboard: React.FC<LiquidityPoolDashboardProps> = ({ 
         'current_user',
         userRating,
         nft,
-        { ada: liquidity, rdmTokens: liquidity }
+        { ada: liquidity, rdmTokens: 0 }
       );
 
       Alert.alert('Success', `LP Pool created! Pool ID: ${pool.id}`);
@@ -269,12 +269,51 @@ export const LiquidityPoolDashboard: React.FC<LiquidityPoolDashboardProps> = ({ 
       return;
     }
 
-    // For dummy pools, just show success message
-    Alert.alert('Success', `Investment of ${amount} RDM submitted!`);
-    setShowInvestModal(false);
-    setSelectedPool(null);
-    setInvestmentAmount('100');
-    loadMyInvestments();
+    setLoading(true);
+    try {
+      const services = getRDMServices();
+      
+      // Check balance
+      const baseBalance = services.tokenService.getPurseBalance(PurseType.BASE);
+      if (amount > baseBalance.ada) {
+        Alert.alert(
+          'Insufficient Balance',
+          `You need ${amount} ADA. You have ${baseBalance.ada.toFixed(2)} ADA.`
+        );
+        return;
+      }
+
+      // For dummy pools, we still need to deduct tokens
+      // Check if it's a real pool or dummy pool
+      const realPool = services.liquidityPoolService.getPool(selectedPool.id);
+      
+      if (realPool) {
+        // Real pool - use actual service
+        const investment = await services.medaa2Agent.processInvestment(
+          selectedPool.id,
+          'current_user',
+          { ada: amount, rdmTokens: 0 }
+        );
+        Alert.alert('Success', `Investment of ${amount} ADA submitted! LP Tokens: ${investment.lpTokens.toFixed(2)}`);
+      } else {
+        // Dummy pool - still deduct tokens for consistency
+        const success = services.tokenService.deductFromBasePurse({ ada: amount, rdmTokens: 0 });
+        if (!success) {
+          Alert.alert('Error', 'Failed to deduct tokens. Insufficient balance.');
+          return;
+        }
+        Alert.alert('Success', `Investment of ${amount} ADA submitted!`);
+      }
+      
+      setShowInvestModal(false);
+      setSelectedPool(null);
+      setInvestmentAmount('100');
+      loadMyInvestments();
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to invest in pool');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getUserRating = (): number => {
@@ -290,13 +329,13 @@ export const LiquidityPoolDashboard: React.FC<LiquidityPoolDashboardProps> = ({ 
   const getRiskColor = (risk: 'low' | 'medium' | 'high'): string => {
     switch (risk) {
       case 'low':
-        return '#9CA3AF'; // Gray
+        return '#10B981'; // Green
       case 'medium':
-        return '#60A5FA'; // Light blue
+        return '#3B82F6'; // Blue
       case 'high':
-        return '#EF4444'; // Red
+        return '#F59E0B'; // Amber
       default:
-        return '#9CA3AF';
+        return '#6B7280';
     }
   };
 
@@ -381,114 +420,142 @@ export const LiquidityPoolDashboard: React.FC<LiquidityPoolDashboardProps> = ({ 
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            {/* Modal Handle Bar */}
+            <View style={styles.modalHandleBar} />
             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
               {/* Modal Header */}
               <View style={styles.modalHeader}>
                 <View style={styles.modalTitleSection}>
-                  <MaterialCommunityIcons name="lightning-bolt" size={24} color="#6366F1" />
-                  <Text style={styles.modalTitle}>Create Habit Liquidity Pool</Text>
+                  <View style={styles.modalIconContainer}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={24} color="#6366F1" />
+                  </View>
+                  <View style={styles.modalTitleWrapper}>
+                    <Text style={styles.modalTitle}>Create Habit Liquidity Pool</Text>
+                  </View>
                 </View>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                  <MaterialCommunityIcons name="close" size={24} color="#111827" />
+                <TouchableOpacity onPress={() => setShowCreateModal(false)} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="close" size={22} color="#6B7280" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.modalDescription}>
-                Create an RDM-HabitNFT LP pair. Investors can provide liquidity and earn yield when you succeed.
+                Create an RDM-HabitNFT LP pair. Investors provide liquidity and earn yield on your success.
               </Text>
 
               {/* Rating Warning */}
               <View style={styles.ratingWarningBox}>
                 <View style={styles.ratingWarningHeader}>
-                  <MaterialCommunityIcons name="trophy" size={20} color="#F59E0B" />
+                  <View style={styles.ratingIconContainer}>
+                    <MaterialCommunityIcons name="trophy" size={20} color="#F59E0B" />
+                  </View>
                   <Text style={styles.ratingWarningTitle}>Athlete Rating</Text>
-                </View>
-                <View style={styles.ratingBadge}>
-                  <Text style={styles.ratingBadgeText}>{userRating.toFixed(1)}/100</Text>
+                  <View style={styles.ratingBadge}>
+                    <Text style={styles.ratingBadgeText}>{userRating.toFixed(1)}/100</Text>
+                  </View>
                 </View>
                 {userRating < 70 && (
                   <View style={styles.ratingWarningMessage}>
-                    <MaterialCommunityIcons name="alert-circle" size={16} color="#F59E0B" />
+                    <MaterialCommunityIcons name="alert-circle" size={15} color="#F59E0B" />
                     <Text style={styles.ratingWarningText}>
-                      Your rating is below the recommended threshold (70). You can still create a pool, but if the goal fails, your rating will decrease further. Proceed at your own risk.
+                      Rating below threshold (70). Goal failure will decrease rating further. Proceed at your own risk.
                     </Text>
                   </View>
                 )}
               </View>
 
               {/* Goal Selection */}
-              <Text style={styles.formLabel}>Select Goal *</Text>
-              <TouchableOpacity
-                style={styles.dropdownButton}
-                onPress={() => setShowGoalDropdown(true)}
-              >
-                <Text style={[styles.dropdownText, !selectedGoal && styles.dropdownPlaceholder]}>
-                  {selectedGoal ? selectedGoal.title : 'Choose a goal'}
-                </Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color="#666" />
-              </TouchableOpacity>
-
-              {/* Initial Liquidity */}
-              <Text style={styles.formLabel}>Initial Liquidity (RDM) *</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="100"
-                value={initialLiquidity}
-                onChangeText={setInitialLiquidity}
-                keyboardType="numeric"
-              />
-              <Text style={styles.helperText}>Your initial contribution to the pool</Text>
-
-              {/* Target APY */}
-              <Text style={styles.formLabel}>Target APY (%) *</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="15"
-                value={targetAPY}
-                onChangeText={setTargetAPY}
-                keyboardType="numeric"
-              />
-              <Text style={styles.helperText}>Expected annual yield for investors (5-100%)</Text>
-
-              {/* Min Investment */}
-              <Text style={styles.formLabel}>Min Investment (RDM)</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="10"
-                value={minInvestment}
-                onChangeText={setMinInvestment}
-                keyboardType="numeric"
-              />
-
-              {/* Max Investment */}
-              <Text style={styles.formLabel}>Max Investment (RDM)</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="1000"
-                value={maxInvestment}
-                onChangeText={setMaxInvestment}
-                keyboardType="numeric"
-              />
-
-              {/* How it works */}
-              <View style={styles.howItWorksBox}>
-                <View style={styles.howItWorksHeader}>
-                  <MaterialCommunityIcons name="lightning-bolt" size={20} color="#3B82F6" />
-                  <Text style={styles.howItWorksTitle}>How it works:</Text>
-                </View>
-                <Text style={styles.howItWorksItem}>• Investors provide liquidity and earn yield on success</Text>
-                <Text style={styles.howItWorksItem}>• You get bonus RDM when goal succeeds</Text>
-                <Text style={styles.howItWorksItem}>• On failure: investors lose position, you lose more, rating decreases</Text>
+              <View style={styles.formFieldContainer}>
+                <Text style={styles.formLabel}>Select Goal *</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setShowGoalDropdown(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.dropdownText, !selectedGoal && styles.dropdownPlaceholder]}>
+                    {selectedGoal ? selectedGoal.title : 'Choose a goal'}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
               </View>
 
-              {/* Important Warning */}
-              <View style={styles.importantWarningBox}>
-                <View style={styles.importantWarningHeader}>
-                  <MaterialCommunityIcons name="alert-circle" size={20} color="#F59E0B" />
-                  <Text style={styles.importantWarningTitle}>Important:</Text>
+              {/* Initial Liquidity */}
+              <View style={styles.formFieldContainer}>
+                <Text style={styles.formLabel}>Initial Liquidity (RDM) *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="100"
+                  value={initialLiquidity}
+                  onChangeText={setInitialLiquidity}
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={styles.helperText}>Your initial pool contribution</Text>
+              </View>
+
+              {/* Target APY */}
+              <View style={styles.formFieldContainer}>
+                <Text style={styles.formLabel}>Target APY (%) *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="15"
+                  value={targetAPY}
+                  onChangeText={setTargetAPY}
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <Text style={styles.helperText}>Annual yield for investors (5-100%)</Text>
+              </View>
+
+              {/* Min Investment */}
+              <View style={styles.formFieldContainer}>
+                <Text style={styles.formLabel}>Min Investment (RDM)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="10"
+                  value={minInvestment}
+                  onChangeText={setMinInvestment}
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              {/* Max Investment */}
+              <View style={styles.formFieldContainer}>
+                <Text style={styles.formLabel}>Max Investment (RDM)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="1000"
+                  value={maxInvestment}
+                  onChangeText={setMaxInvestment}
+                  keyboardType="numeric"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              {/* How it works & Important - Side by Side */}
+              <View style={styles.infoBoxesRow}>
+                <View style={styles.howItWorksBox}>
+                  <View style={styles.howItWorksHeader}>
+                    <View style={styles.howItWorksIconContainer}>
+                      <MaterialCommunityIcons name="lightning-bolt" size={18} color="#3B82F6" />
+                    </View>
+                    <Text style={styles.howItWorksTitle}>How it works</Text>
+                  </View>
+                  <Text style={styles.howItWorksItem}>• Investors earn yield on success</Text>
+                  <Text style={styles.howItWorksItem}>• You get bonus RDM on success</Text>
+                  <Text style={styles.howItWorksItem}>• On failure: losses for all</Text>
                 </View>
-                <Text style={styles.importantWarningText}>
-                  Your current rating is {userRating.toFixed(1)}/100. If you create a pool and the goal fails, your rating will decrease by 5 points. This is your choice - proceed if you're confident in your ability to succeed.
-                </Text>
+
+                <View style={styles.importantWarningBox}>
+                  <View style={styles.importantWarningHeader}>
+                    <View style={styles.importantIconContainer}>
+                      <MaterialCommunityIcons name="alert-circle" size={18} color="#F59E0B" />
+                    </View>
+                    <Text style={styles.importantWarningTitle}>Important</Text>
+                  </View>
+                  <Text style={styles.importantWarningText}>
+                    Rating: {userRating.toFixed(1)}/100. If goal fails, rating decreases by 5 points. Proceed if confident.
+                  </Text>
+                </View>
               </View>
 
               {/* Action Buttons */}
@@ -511,7 +578,7 @@ export const LiquidityPoolDashboard: React.FC<LiquidityPoolDashboardProps> = ({ 
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
                     <>
-                      <MaterialCommunityIcons name="arrow-up" size={18} color="#FFFFFF" />
+                      <MaterialCommunityIcons name="arrow-up" size={16} color="#FFFFFF" />
                       <Text style={styles.modalCreateButtonText}>Create LP Pool</Text>
                     </>
                   )}
@@ -675,56 +742,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    paddingTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   headerTitleContainer: {
     flex: 1,
     marginRight: 12,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 2,
+    marginBottom: 4,
+    letterSpacing: -0.4,
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#6B7280',
+    letterSpacing: -0.1,
   },
   createPoolButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#6366F1',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 4,
-    minWidth: 80,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 12,
+    gap: 6,
+    minWidth: 90,
     shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   createPoolButtonText: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.15,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 20,
+    padding: 18,
+    paddingBottom: 24,
   },
   content: {
-    gap: 12,
+    gap: 14,
   },
   sectionTitle: {
     fontSize: 20,
@@ -734,14 +804,16 @@ const styles = StyleSheet.create({
   },
   poolCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   poolCardHeader: {
     flexDirection: 'row',
@@ -754,65 +826,80 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   poolGoalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 5,
+    letterSpacing: -0.3,
+    lineHeight: 24,
   },
   poolCreator: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
+    letterSpacing: -0.1,
   },
   riskBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   riskBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   poolMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopWidth: 1.5,
+    borderTopColor: '#F3F4F6',
   },
   poolMetric: {
     alignItems: 'center',
     flex: 1,
   },
   poolMetricLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
-    marginBottom: 4,
+    marginBottom: 6,
+    fontWeight: '500',
+    letterSpacing: -0.1,
   },
   poolMetricValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.3,
   },
   apyValue: {
     color: '#10B981',
   },
   emptyState: {
     alignItems: 'center',
-    padding: 40,
-    marginTop: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+    marginTop: 20,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#6B7280',
-    marginTop: 16,
-    marginBottom: 4,
+    color: '#111827',
+    marginTop: 20,
+    marginBottom: 6,
+    letterSpacing: -0.2,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#6B7280',
     textAlign: 'center',
+    letterSpacing: -0.1,
   },
   modalOverlay: {
     flex: 1,
@@ -821,11 +908,24 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '90%',
-    paddingTop: 20,
+    paddingTop: 12,
     flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHandleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   investModalContent: {
     flex: 1,
@@ -848,199 +948,301 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingTop: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   modalTitleSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    flex: 1,
+  },
+  modalIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitleWrapper: {
     flex: 1,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.4,
+    lineHeight: 28,
+  },
+  modalDescriptionContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 18,
   },
   modalDescription: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
-    marginBottom: 20,
-    paddingHorizontal: 20,
-    lineHeight: 20,
+    lineHeight: 22,
+    letterSpacing: -0.15,
   },
   ratingWarningBox: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
     padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
+    marginBottom: 18,
+    marginHorizontal: 20,
+    borderWidth: 1.5,
+    borderColor: '#FEF3C7',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
   },
   ratingWarningHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 0,
+  },
+  ratingIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ratingWarningTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#92400E',
+    letterSpacing: -0.2,
+    flex: 1,
   },
   ratingBadge: {
     backgroundColor: '#F59E0B',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    alignSelf: 'flex-start',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
   },
   ratingBadgeText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: -0.1,
   },
   ratingWarningMessage: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
     marginTop: 12,
+    alignItems: 'flex-start',
   },
   ratingWarningText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 13,
     color: '#92400E',
-    lineHeight: 18,
+    lineHeight: 19,
+    letterSpacing: -0.1,
+  },
+  formFieldContainer: {
+    marginBottom: 4,
   },
   formLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#111827',
     marginBottom: 8,
-    marginTop: 16,
+    marginTop: 14,
+    letterSpacing: -0.15,
   },
   formInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#F9FAFB',
-    marginBottom: 4,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 6,
+    color: '#111827',
+    letterSpacing: -0.1,
   },
   helperText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
-    marginBottom: 8,
+    marginBottom: 4,
+    letterSpacing: -0.1,
+    marginTop: 2,
   },
   dropdownButton: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   dropdownText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#111827',
+    letterSpacing: -0.1,
   },
   dropdownPlaceholder: {
     color: '#9CA3AF',
   },
-  howItWorksBox: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 20,
+  infoBoxesRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
+    marginHorizontal: 20,
+    alignItems: 'stretch',
+  },
+  howItWorksBox: {
+    flex: 1,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#DBEAFE',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
+    minHeight: 140,
   },
   howItWorksHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  howItWorksIconContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   howItWorksTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1E40AF',
+    letterSpacing: -0.2,
+    flex: 1,
   },
   howItWorksItem: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#1E40AF',
-    marginBottom: 8,
-    lineHeight: 20,
+    marginBottom: 5,
+    lineHeight: 16,
+    letterSpacing: -0.1,
+    paddingLeft: 2,
   },
   importantWarningBox: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
+    flex: 1,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: '#FEF3C7',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
+    minHeight: 140,
   },
   importantWarningHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  importantIconContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   importantWarningTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#92400E',
+    letterSpacing: -0.2,
+    flex: 1,
   },
   importantWarningText: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#92400E',
-    lineHeight: 20,
+    lineHeight: 16,
+    letterSpacing: -0.1,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
+    gap: 10,
+    marginTop: 16,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
   modalCancelButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   modalCancelButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#6B7280',
+    letterSpacing: -0.15,
   },
   modalCreateButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     backgroundColor: '#6366F1',
     gap: 8,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   modalCreateButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: -0.15,
   },
   buttonDisabled: {
     opacity: 0.6,

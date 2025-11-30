@@ -1,0 +1,26 @@
+{
+  "validators": [
+    {
+      "title": "CharityDistribution",
+      "description": "Charity token distribution to external addresses",
+      "compiledCode": "4e4d0100ff0000",
+      "hash": "placeholder_hash_charitydistribution",
+      "version": "V2"
+    }
+  ],
+  "types": {
+    "TokenAmount": {
+      "ada": "Integer",
+      "rdmToken": "Maybe Integer"
+    },
+    "CharityDatum": {
+      "fromPurse": "BuiltinByteString",
+      "toAddress": "Address",
+      "amount": "TokenAmount",
+      "charityId": "BuiltinByteString",
+      "goalId": "Maybe BuiltinByteString"
+    }
+  },
+  "note": "This is a placeholder. Replace with actual compiled contract code after compilation."
+}
+

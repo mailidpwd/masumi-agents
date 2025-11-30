@@ -222,9 +222,13 @@ export class EndToEndFlowTest {
       );
       console.log(`   ✓ Minted HabitNFT: ${nft.id}`);
 
-      // 4. Check LP qualification
+      // 4. Check LP qualification (must be done BEFORE creating LP pair)
       const qualified = services.habitNFTService.checkLPQualification(nft.id, profile.overallRating);
       console.log(`   ✓ LP Qualified: ${qualified}`);
+      
+      if (!qualified) {
+        throw new Error('NFT must be LP qualified to create LP pair');
+      }
 
       // 5. Create LP pair
       const pool = await services.medaa2Agent.createLPPair(

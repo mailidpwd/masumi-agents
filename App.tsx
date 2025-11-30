@@ -16,18 +16,25 @@ import { WalletInfo } from './types/cardano';
 import { initializeRDMServices, getRDMServices, RDMServiceContainer } from './services/agentInitializer';
 import { WalletService } from './services/walletService';
 
-// Suppress Expo Updates errors
+// Suppress Expo Updates errors completely
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
-    // Suppress update-related errors
-    if (error.message && (
-      error.message.includes('Failed to download remote update') ||
-      error.message.includes('java.io.IOException') ||
-      error.message.includes('expo-updates')
-    )) {
-      console.warn('Suppressed update error:', error.message);
-      return; // Don't show the error
+    // Suppress ALL update-related errors (including IOException)
+    const errorMessage = error?.message || '';
+    const errorStack = error?.stack || '';
+    const fullError = (errorMessage + ' ' + errorStack).toLowerCase();
+    
+    if (
+      fullError.includes('failed to download remote update') ||
+      fullError.includes('java.io.ioexception') ||
+      fullError.includes('expo-updates') ||
+      fullError.includes('remote update') ||
+      fullError.includes('update download')
+    ) {
+      console.warn('Suppressed update error (ignoring):', errorMessage);
+      // Return without calling original handler - completely ignore
+      return;
     }
     // Call original handler for other errors
     if (originalHandler) {
@@ -36,12 +43,30 @@ if (typeof ErrorUtils !== 'undefined') {
   });
 }
 
+// Also suppress at React Native level
+if (typeof console !== 'undefined' && console.error) {
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    const errorStr = args.join(' ').toLowerCase();
+    if (
+      errorStr.includes('failed to download remote update') ||
+      errorStr.includes('java.io.ioexception') ||
+      errorStr.includes('expo-updates')
+    ) {
+      // Silently ignore
+      return;
+    }
+    originalError.apply(console, args);
+  };
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [rdmServices, setRdmServices] = useState<RDMServiceContainer | null>(null);
   const [initializing, setInitializing] = useState(false);
   const [initAttempted, setInitAttempted] = useState(false);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
   useEffect(() => {
     // Suppress any update-related errors on startup
@@ -96,24 +121,24 @@ export default function App() {
     setInitAttempted(true);
     setInitializing(true);
     try {
-      // Add timeout to prevent indefinite loading (reduced to 5 seconds)
+      // Add timeout to prevent indefinite loading (increased to 20 seconds for slow networks)
       const initPromise = initializeRDMServices();
       const timeoutPromise = new Promise<RDMServiceContainer>((_, reject) => 
-        setTimeout(() => reject(new Error('Initialization timeout')), 5000)
+        setTimeout(() => reject(new Error('Initialization timeout')), 20000)
       );
       
       const services = await Promise.race([initPromise, timeoutPromise]);
       setRdmServices(services);
     } catch (error) {
-      console.error('Failed to initialize RDM services:', error);
-      // Even if initialization fails, try to get services (they might be partially initialized)
+      // Silently handle timeout - services may still be partially initialized
+      // Try to get services even if initialization timed out
       try {
         const services = getRDMServices();
-        setRdmServices(services);
+        if (services) {
+          setRdmServices(services);
+        }
       } catch {
-        // If services aren't available, show error but allow app to continue
-        console.warn('RDM services not available, but continuing anyway');
-        // Set a minimal service container or show error message
+        // Services will be initialized on next attempt
       }
     } finally {
       setInitializing(false);
@@ -139,6 +164,11 @@ export default function App() {
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
+    // Reload dashboard when navigating to home tab
+    // This ensures goals created in other tabs show up immediately
+    if (tab === 'home') {
+      setDashboardRefreshKey(prev => prev + 1);
+    }
   };
 
   const handleDashboardNavigate = (screen: string) => {
@@ -197,14 +227,46 @@ export default function App() {
       // If initialization failed or timed out, show dashboard anyway
       // Services will be created on-demand if needed
       console.warn('RDM services not initialized, showing dashboard with limited functionality');
-      return <Dashboard onNavigate={handleDashboardNavigate} />;
+      return <Dashboard onNavigate={handleDashboardNavigate} refreshTrigger={dashboardRefreshKey} />;
     }
 
     // Render content based on active tab
     switch (activeTab) {
       case 'home':
-        return <Dashboard onNavigate={handleDashboardNavigate} />;
+        return <Dashboard onNavigate={handleDashboardNavigate} refreshTrigger={dashboardRefreshKey} />;
       case 'goals':
+        // Ensure services are initialized before rendering goal manager
+        if (!rdmServices) {
+          // Try to initialize services if not already attempted
+          if (!initAttempted && wallet) {
+            initializeServices();
+            return (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#0033AD" />
+                <Text style={styles.loadingText}>Loading services...</Text>
+              </View>
+            );
+          }
+          // If initialization failed, try to get services anyway
+          try {
+            const services = getRDMServices();
+            return (
+              <Medaa1GoalManager
+                agent={services.medaa1Agent}
+                tokenService={services.tokenService}
+                onNavigate={handleDashboardNavigate}
+              />
+            );
+          } catch (error) {
+            // If services still not available, show error
+            return (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Services not available</Text>
+                <Text style={styles.loadingSubtext}>Please try again</Text>
+              </View>
+            );
+          }
+        }
         return (
           <Medaa1GoalManager
             agent={rdmServices.medaa1Agent}
@@ -221,7 +283,7 @@ export default function App() {
         // Profile tab shows vault manager (for now)
         return <VaultManager onNavigate={handleDashboardNavigate} />;
       default:
-        return <Dashboard onNavigate={handleDashboardNavigate} />;
+        return <Dashboard onNavigate={handleDashboardNavigate} refreshTrigger={dashboardRefreshKey} />;
     }
   };
 

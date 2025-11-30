@@ -163,10 +163,10 @@ export class AgentNetwork {
           const result = await this.masumiClient.publishEvent(masumiEvent);
           
           if (result.success) {
-            console.log(`✅ Event published to Masumi: ${event.type} (Event ID: ${result.eventId || 'N/A'})`);
-          } else {
-            console.warn(`⚠️ Failed to publish event to Masumi: ${event.type} - ${result.error || 'Unknown error'}`);
+            // Only log successful publishes in debug mode
+            // console.log(`✅ Event published to Masumi: ${event.type} (Event ID: ${result.eventId || 'N/A'})`);
           }
+          // Don't log failures - MasumiClient already handles error logging
         } else {
           console.warn(`⚠️ Masumi agent ID not configured for ${event.sourceAgent}, skipping Masumi publish`);
         }

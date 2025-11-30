@@ -500,14 +500,5 @@ export class LiquidityPoolService {
   getAllPools(): LPPoolPair[] {
     return Array.from(this.pools.values());
   }
-
-  /**
-   * Get investor positions
-   */
-  getInvestorPositions(userId: string): LPInvestment[] {
-    return Array.from(this.investments.values()).filter(
-      (inv) => inv.investorId === userId
-    );
-  }
 }
 

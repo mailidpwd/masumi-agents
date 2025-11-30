@@ -1,0 +1,26 @@
+{
+  "validators": [
+    {
+      "title": "PurseTransfer",
+      "description": "Token transfer between purses (BASE, REWARD, REMORSE, CHARITY)",
+      "compiledCode": "4e4d0100ff0000",
+      "hash": "placeholder_hash_pursetransfer",
+      "version": "V2"
+    }
+  ],
+  "types": {
+    "PurseType": ["BasePurse", "RewardPurse", "RemorsePurse", "CharityPurse"],
+    "TokenAmount": {
+      "ada": "Integer",
+      "rdmToken": "Maybe Integer"
+    },
+    "TransferDatum": {
+      "fromPurse": "PurseType",
+      "toPurse": "PurseType",
+      "amount": "TokenAmount",
+      "goalId": "Maybe BuiltinByteString"
+    }
+  },
+  "note": "This is a placeholder. Replace with actual compiled contract code after compilation."
+}
+

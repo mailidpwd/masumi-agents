@@ -156,7 +156,7 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
         !isMentor ? mentorOrBuddyId : undefined,
         category,
         `Goal related to ${category}`,
-        { ada: rdmAmount, rdmTokens: rdmAmount },
+        { ada: rdmAmount, rdmTokens: 0 },
         {
           milestones: ['Complete weekly check-ins', 'Achieve 80% success rate'],
           verificationMethod: 'multi',
@@ -221,7 +221,7 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
         </View>
         {/* Keep existing find-match form */}
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Use the "Struggling with Habits" section to find matches</Text>
+          <Text style={styles.emptyText}>Search for mentors or buddies to find matches</Text>
               <TouchableOpacity
             style={styles.emptyButton}
             onPress={() => setView('browse')}
@@ -325,51 +325,6 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
           </TouchableOpacity>
         </View>
 
-        {/* Struggling with Habits Section */}
-        <View style={styles.strugglingCard}>
-          <View style={styles.strugglingHeader}>
-            <MaterialCommunityIcons name="alert-circle" size={24} color="#6366F1" />
-            <Text style={styles.strugglingTitle}>Struggling with Habits?</Text>
-          </View>
-          <Text style={styles.strugglingText}>
-            Select which habits you're struggling with, and we'll automatically connect you with
-            mentors or buddies who are succeeding at those habits. OR simply connect to a buddy of your choice.
-          </Text>
-          <TouchableOpacity
-            style={styles.selectHabitsButton}
-            onPress={() => setShowHabitSelector(true)}
-          >
-            <MaterialCommunityIcons name="star" size={20} color="#FFFFFF" />
-            <Text style={styles.selectHabitsButtonText}>Select Struggling Habits</Text>
-          </TouchableOpacity>
-          {selectedStrugglingHabits.length > 0 && (
-            <View style={styles.selectedHabitsContainer}>
-              <Text style={styles.selectedHabitsLabel}>Selected:</Text>
-              <View style={styles.selectedHabitsChips}>
-                {selectedStrugglingHabits.map((habit) => (
-                  <View key={habit} style={styles.selectedHabitChip}>
-                    <Text style={styles.selectedHabitChipText}>{habit}</Text>
-                    <TouchableOpacity
-                      onPress={() => toggleHabitSelection(habit)}
-                      style={styles.removeHabitButton}
-                    >
-                      <MaterialCommunityIcons name="close" size={16} color="#6366F1" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Auto-Match Active Banner */}
-        {selectedStrugglingHabits.length > 0 && (
-          <View style={styles.autoMatchBanner}>
-            <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
-            <Text style={styles.autoMatchBannerText}>Auto-Match Active</Text>
-          </View>
-        )}
-
       {/* Quick Actions */}
       <View style={styles.quickActions}>
         <TouchableOpacity
@@ -430,10 +385,12 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
                 {filteredMentors.map((mentor) => (
                   <View key={mentor.id} style={styles.mentorCard}>
                     <View style={styles.mentorCardContent}>
-                      <View style={styles.mentorAvatar}>
-                        <Text style={styles.mentorAvatarText}>
-                          {mentor.avatarInitials || mentor.name.substring(0, 2).toUpperCase()}
-                        </Text>
+                      <View style={[styles.mentorAvatar, mentor.gender === 'female' ? styles.avatarFemale : styles.avatarMale]}>
+                        <MaterialCommunityIcons 
+                          name={mentor.gender === 'female' ? 'account-circle' : 'account-circle'} 
+                          size={32} 
+                          color="#FFFFFF" 
+                        />
                       </View>
                       <View style={styles.mentorInfo}>
                         <Text style={styles.mentorName} numberOfLines={1}>{mentor.name}</Text>
@@ -447,12 +404,19 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
                       </Text>
                     </View>
                         <View style={styles.mentorStatsRow}>
-                          <View style={styles.mentorSuccessRate}>
-                            <Text style={styles.mentorSuccessRateLabel}>Success Rate</Text>
-                            <Text style={styles.mentorSuccessRateValue}>{mentor.successRate}%</Text>
-                  </View>
+                          <View style={styles.mentorStatItem}>
+                            <Text style={styles.mentorStatLabel}>Success Rate</Text>
+                            <Text style={[styles.mentorStatValue, styles.mentorSuccessRateValue]}>{mentor.successRate}%</Text>
+                          </View>
+                          <View style={styles.mentorStatDivider} />
+                          <View style={styles.mentorStatItem}>
+                            <Text style={styles.mentorStatLabel}>Rate</Text>
+                            <View style={styles.rateValueContainer}>
+                              <Text style={styles.mentorStatValue}>{mentor.rate} RDM</Text>
+                              <Text style={styles.rateUnit}>/hr</Text>
+                            </View>
+                          </View>
                         </View>
-                        <Text style={styles.mentorRate}>{mentor.rate} RDM/hr</Text>
                     </View>
                     </View>
                     <TouchableOpacity
@@ -491,10 +455,12 @@ export const HabitSwapMarketplace: React.FC<HabitSwapMarketplaceProps> = ({ onNa
                 {filteredBuddies.map((buddy) => (
                   <View key={buddy.id} style={styles.buddyCard}>
                     <View style={styles.buddyCardContent}>
-                      <View style={styles.buddyAvatar}>
-                        <Text style={styles.buddyAvatarText}>
-                          {buddy.avatarInitials || buddy.name.substring(0, 2).toUpperCase()}
-                        </Text>
+                      <View style={[styles.buddyAvatar, buddy.gender === 'female' ? styles.avatarFemale : styles.avatarMale]}>
+                        <MaterialCommunityIcons 
+                          name={buddy.gender === 'female' ? 'account-circle' : 'account-circle'} 
+                          size={32} 
+                          color="#FFFFFF" 
+                        />
                       </View>
                       <View style={styles.buddyInfo}>
                         <Text style={styles.buddyName} numberOfLines={1}>{buddy.name}</Text>
@@ -613,21 +579,22 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   backButton: {
-    marginRight: 12,
+    marginRight: 10,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.3,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 14,
+    gap: 10,
   },
   searchBar: {
     flex: 1,
@@ -635,9 +602,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
   },
   searchIcon: {
@@ -645,15 +612,16 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    color: '#333',
+    fontSize: 15,
+    color: '#111827',
+    letterSpacing: -0.1,
   },
   filterButton: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
@@ -749,112 +717,129 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    gap: 10,
+    marginBottom: 16,
   },
   quickActionCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 14,
+    padding: 14,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   quickActionText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#333',
-    marginTop: 12,
+    color: '#111827',
+    marginTop: 10,
+    letterSpacing: -0.2,
   },
   quickActionSubtext: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 3,
     textAlign: 'center',
+    letterSpacing: -0.1,
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
+    padding: 3,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 9,
   },
   tabActive: {
     backgroundColor: '#6366F1',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   tabLabel: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#666',
+    color: '#6B7280',
+    letterSpacing: -0.15,
   },
   tabLabelActive: {
     color: '#FFFFFF',
     fontWeight: '600',
   },
   contentSection: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 10,
   },
   mentorCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    marginBottom: 12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   mentorCardContent: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   mentorAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#14B8A6',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#6366F1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     alignSelf: 'center',
   },
-  mentorAvatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  avatarMale: {
+    backgroundColor: '#3B82F6',
+  },
+  avatarFemale: {
+    backgroundColor: '#EC4899',
   },
   mentorInfo: {
     alignItems: 'center',
   },
   mentorName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 3,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   mentorCategory: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    color: '#6B7280',
     marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: -0.1,
   },
   mentorRating: {
     alignItems: 'center',
@@ -862,107 +847,142 @@ const styles = StyleSheet.create({
   },
   starsContainer: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   mentorRatingText: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: 10,
+    color: '#6B7280',
     textAlign: 'center',
   },
   mentorStatsRow: {
     width: '100%',
-  },
-  mentorSuccessRate: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'space-between',
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
-  mentorSuccessRateLabel: {
-    fontSize: 11,
-    color: '#666',
-    marginBottom: 2,
+  mentorStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mentorSuccessRateValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#10B981',
+  mentorStatLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginBottom: 4,
+    letterSpacing: -0.1,
+    fontWeight: '500',
   },
-  mentorRate: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+  mentorStatValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
+  rateValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  rateUnit: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginLeft: 2,
+    letterSpacing: -0.1,
+  },
+  mentorSuccessRateValue: {
+    color: '#10B981',
+  },
+  mentorStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 6,
+  },
   createApprenticeshipButton: {
-    backgroundColor: '#14B8A6',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: 'center',
     width: '100%',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   createApprenticeshipButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
+    letterSpacing: -0.15,
   },
   buddyCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 14,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    marginBottom: 12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   buddyCardContent: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   buddyAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E5E7EB',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#6366F1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     alignSelf: 'center',
-  },
-  buddyAvatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#666',
   },
   buddyInfo: {
     alignItems: 'center',
   },
   buddyName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 3,
     textAlign: 'center',
+    letterSpacing: -0.2,
   },
   buddyHabits: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    color: '#6B7280',
     marginBottom: 8,
     textAlign: 'center',
-    minHeight: 32,
+    minHeight: 28,
+    letterSpacing: -0.1,
   },
   buddyStreak: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF3C7',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
     marginBottom: 8,
     gap: 4,
   },
   buddyStreakText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#92400E',
   },
@@ -970,29 +990,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buddyCompatibilityLabel: {
-    fontSize: 11,
-    color: '#666',
+    fontSize: 10,
+    color: '#6B7280',
     marginBottom: 2,
   },
   buddyCompatibilityValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#10B981',
+    letterSpacing: -0.3,
   },
   connectBuddyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#14B8A6',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    borderRadius: 10,
     gap: 6,
     width: '100%',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   connectBuddyButtonText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+    letterSpacing: -0.15,
   },
   emptyState: {
     alignItems: 'center',

@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Medaa1Agent } from '../services/medaa1Agent';
 import { DailyGoal, GoalStatus, TokenAmount, PurseType } from '../types/rdm';
 import { TokenService } from '../services/tokenService';
@@ -53,6 +54,7 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [baseBalance, setBaseBalance] = useState<TokenAmount>({ ada: 0, rdmTokens: 0 });
   
   // Form state - matching specification
   const [title, setTitle] = useState('');
@@ -60,7 +62,7 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
   const [category, setCategory] = useState<GoalCategory | ''>('');
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [pledgeAmount, setPledgeAmount] = useState('100');
+  const [pledgeAmount, setPledgeAmount] = useState('10');
   const [verificationMethod, setVerificationMethod] = useState<VerificationMethod>(VerificationMethod.self_report);
   const [verifierEmail, setVerifierEmail] = useState('');
   const [checkInFrequency, setCheckInFrequency] = useState<CheckInFrequency>(CheckInFrequency.weekly);
@@ -75,7 +77,23 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
 
   useEffect(() => {
     loadGoals();
+    updateBalance();
+    // Update balance every 10 seconds to match wallet header refresh rate
+    // Both now read from tokenService base purse, so they stay in sync
+    const balanceInterval = setInterval(updateBalance, 10000);
+    return () => clearInterval(balanceInterval);
   }, []);
+
+  const updateBalance = () => {
+    try {
+      // Show base purse balance (with local deductions) so users can see available balance
+      // This shows what they can actually use after creating goals/investments
+      const balance = tokenService.getPurseBalance(PurseType.BASE);
+      setBaseBalance(balance);
+    } catch (error) {
+      console.error('Failed to update balance:', error);
+    }
+  };
 
   const loadGoals = () => {
     const todaysGoals = agent.getTodaysGoals();
@@ -125,8 +143,18 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
     }
 
     const pledge = parseFloat(pledgeAmount);
-    if (isNaN(pledge) || pledge < 10) {
-      Alert.alert('Invalid Amount', 'Minimum pledge is 10 RDM tokens');
+    if (isNaN(pledge) || pledge < 1) {
+      Alert.alert('Invalid Amount', 'Minimum pledge is 1 ADA');
+      return;
+    }
+
+    // Check if user has enough ADA balance
+    const currentBalance = tokenService.getPurseBalance(PurseType.BASE);
+    if (pledge > currentBalance.ada) {
+      Alert.alert(
+        'Insufficient ADA',
+        `You need ${pledge} ADA. You have ${currentBalance.ada.toFixed(2)} ADA.`
+      );
       return;
     }
 
@@ -136,8 +164,8 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
     }
 
     const pledgedTokens: TokenAmount = {
-      ada: 0,
-      rdmTokens: pledge,
+      ada: pledge,
+      rdmTokens: 0,
     };
 
     try {
@@ -179,6 +207,10 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
         verifierEmail ? [verifierEmail] : undefined
       );
 
+      // Update balance display immediately after goal creation
+      // The deduction happens synchronously in createEnhancedGoal, so we can update right away
+      updateBalance();
+      
       Alert.alert('Success', 'Goal created successfully! 🎯', [
         {
           text: 'OK',
@@ -201,7 +233,7 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
     setCategory('');
     setStartDate(new Date());
     setEndDate(null);
-    setPledgeAmount('100');
+    setPledgeAmount('10');
     setVerificationMethod(VerificationMethod.self_report);
     setVerifierEmail('');
     setCheckInFrequency(CheckInFrequency.weekly);
@@ -233,7 +265,57 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
     return '#6366F1'; // Default purple
   };
 
-  const baseBalance = tokenService.getPurseBalance(PurseType.BASE);
+  const getCategoryGradient = (category?: string): string[] => {
+    if (!category) return ['#E0E7FF', '#C7D2FE']; // Light blue gradient
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('climate') || lowerCategory.includes('environment')) {
+      return ['#D1FAE5', '#A7F3D0']; // Light green gradient
+    }
+    if (lowerCategory.includes('health') || lowerCategory.includes('fitness') || lowerCategory.includes('walking')) {
+      return ['#CCFBF1', '#99F6E4']; // Light teal gradient
+    }
+    if (lowerCategory.includes('education') || lowerCategory.includes('learn')) {
+      return ['#DBEAFE', '#BFDBFE']; // Light blue gradient
+    }
+    if (lowerCategory.includes('travel') || lowerCategory.includes('going')) {
+      return ['#E9D5FF', '#DDD6FE']; // Light purple gradient
+    }
+    return ['#E0E7FF', '#C7D2FE']; // Default light blue gradient
+  };
+
+  const getCategoryIconColor = (category?: string): string => {
+    if (!category) return '#6366F1'; // Default purple
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('climate') || lowerCategory.includes('environment')) {
+      return '#10B981'; // Green
+    }
+    if (lowerCategory.includes('health') || lowerCategory.includes('fitness') || lowerCategory.includes('walking')) {
+      return '#14B8A6'; // Teal
+    }
+    if (lowerCategory.includes('education') || lowerCategory.includes('learn')) {
+      return '#3B82F6'; // Blue
+    }
+    if (lowerCategory.includes('travel') || lowerCategory.includes('going')) {
+      return '#8B5CF6'; // Purple
+    }
+    return '#6366F1'; // Default purple
+  };
+
+  const getCategoryIcon = (category?: string): string => {
+    if (!category) return 'target';
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory.includes('health') || lowerCategory.includes('fitness') || lowerCategory.includes('walking')) {
+      return 'walk'; // Walking person icon
+    }
+    if (lowerCategory.includes('travel') || lowerCategory.includes('going')) {
+      return 'car'; // Car icon
+    }
+    if (lowerCategory.includes('flag') || lowerCategory.includes('goal')) {
+      return 'flag'; // Flag icon
+    }
+    return 'target'; // Default target icon
+  };
+
   const stats = agent.getStatistics();
 
   // Filter goals based on selected tab
@@ -309,11 +391,12 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
             <TouchableOpacity
               onPress={() => setShowCreateForm(false)}
               style={styles.backButton}
+              activeOpacity={0.7}
             >
-              <MaterialCommunityIcons name="arrow-left" size={24} color="#6366F1" />
+              <MaterialCommunityIcons name="arrow-left" size={22} color="#6366F1" />
             </TouchableOpacity>
             <Text style={styles.formHeaderTitle}>Create Goal</Text>
-            <View style={{ width: 24 }} />
+            <View style={{ width: 22 }} />
           </View>
           <ScrollView 
             style={styles.formScrollView}
@@ -356,10 +439,10 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
                   </TouchableOpacity>
                 </View>
                 <View style={styles.compactRowItem}>
-                  <Text style={styles.compactLabel}>Pledge (RDM) *</Text>
+                  <Text style={styles.compactLabel}>Pledge (ADA) *</Text>
                   <TextInput
                     style={styles.compactInput}
-                    placeholder="100"
+                    placeholder="10"
                     value={pledgeAmount}
                     onChangeText={setPledgeAmount}
                     keyboardType="numeric"
@@ -478,71 +561,88 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <View style={styles.headerContent}>
-              <Text style={styles.title}>My Goals</Text>
-              <Text style={styles.subtitle}>Track all your goals and progress.</Text>
-            </View>
-          </View>
-
-          {/* Filter Tabs */}
-          <View style={styles.filterTabs}>
-            <TouchableOpacity
-              style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-              onPress={() => setFilter('all')}
-            >
-              <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
-                All Goals
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
-              onPress={() => setFilter('active')}
-            >
-              <Text style={[styles.filterTabText, filter === 'active' && styles.filterTabTextActive]}>
-                Active
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterTab, filter === 'completed' && styles.filterTabActive]}
-              onPress={() => setFilter('completed')}
-            >
-              <Text style={[styles.filterTabText, filter === 'completed' && styles.filterTabTextActive]}>
-                Completed
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Balance Card */}
-          <View style={styles.balanceCard}>
-            <View style={styles.balanceHeader}>
-              <MaterialCommunityIcons name="wallet" size={24} color="#6366F1" />
-              <Text style={styles.balanceLabel}>Base Purse Balance</Text>
-            </View>
-            <View style={styles.balanceAmounts}>
-              <View style={styles.balanceItem}>
-                <Text style={styles.balanceAmount}>
-                  {TokenService.formatADA(baseBalance.ada)}
-                </Text>
-                <Text style={styles.balanceCurrency}>ADA</Text>
+              <View style={styles.titleContainer}>
+                <Text style={styles.title}>My Goals</Text>
               </View>
-              {baseBalance.rdmTokens !== undefined && (
-                <View style={styles.balanceItem}>
-                  <Text style={[styles.balanceAmount, styles.balanceAmountRDM]}>
-                    {baseBalance.rdmTokens.toLocaleString()}
-                  </Text>
-                  <Text style={styles.balanceCurrency}>RDM</Text>
-                </View>
-              )}
+              <Text style={styles.subtitle}>Track all your goals and progress</Text>
             </View>
           </View>
 
-          {/* Create Button - Always Visible */}
+          {/* Filter Tabs - Enhanced Segmented Control */}
+          <View style={styles.filterTabsContainer}>
+            <View style={styles.filterTabs}>
+              <TouchableOpacity
+                style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
+                onPress={() => setFilter('all')}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.filterTabText, filter === 'all' && styles.filterTabTextActive]}>
+                  All Goals
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterTab, filter === 'active' && styles.filterTabActive]}
+                onPress={() => setFilter('active')}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.filterTabText, filter === 'active' && styles.filterTabTextActive]}>
+                  Active
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterTab, filter === 'completed' && styles.filterTabActive]}
+                onPress={() => setFilter('completed')}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.filterTabText, filter === 'completed' && styles.filterTabTextActive]}>
+                  Completed
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Balance Card - Enhanced Design with Cardano Logo */}
+          <View style={styles.balanceCard}>
+            <View style={styles.balanceCardContent}>
+              <View style={styles.balanceLeftSection}>
+                <View style={styles.balanceHeader}>
+                  <View style={styles.balanceIconContainer}>
+                    <MaterialCommunityIcons name="wallet" size={16} color="#6366F1" />
+                  </View>
+                  <Text style={styles.balanceLabel}>Base Purse Balance</Text>
+                </View>
+                <View style={styles.balanceAmounts}>
+                  <View style={styles.balanceItem}>
+                    <Text style={styles.balanceAmount}>
+                      {baseBalance.ada.toFixed(2)}
+                    </Text>
+                    <Text style={styles.balanceCurrency}>ADA</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.balanceCardanoLogo}>
+                <MaterialCommunityIcons name="star-circle" size={120} color="#E5E7EB" />
+              </View>
+            </View>
+          </View>
+
+          {/* Create Button - Enhanced Design with Gradient */}
           <TouchableOpacity
-            style={styles.createButton}
+            style={styles.createButtonWrapper}
             onPress={() => setShowCreateForm(true)}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <MaterialCommunityIcons name="plus-circle" size={24} color="#FFFFFF" />
-            <Text style={styles.createButtonText}>Create New Goal</Text>
+            <LinearGradient
+              colors={['#0033AD', '#0066FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.createButton}
+            >
+              <Text style={styles.createButtonText}>Create New Goal</Text>
+              <View style={styles.createButtonIconContainer}>
+                <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
+              </View>
+            </LinearGradient>
           </TouchableOpacity>
 
           {/* Goals List */}
@@ -550,7 +650,7 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
             {filteredGoals.length === 0 ? (
               <View style={styles.emptyState}>
                 <View style={styles.emptyStateIconContainer}>
-                  <MaterialCommunityIcons name="target-variant" size={80} color="#D1D5DB" />
+                  <MaterialCommunityIcons name="target-variant" size={48} color="#E5E7EB" />
                 </View>
                 <Text style={styles.emptyText}>
                   {goals.length === 0 ? 'No goals yet' : `No ${filter === 'all' ? '' : filter} goals`}
@@ -564,37 +664,52 @@ export const Medaa1GoalManager: React.FC<Medaa1GoalManagerProps> = ({ agent, tok
                     onPress={() => setShowCreateForm(true)}
                     activeOpacity={0.8}
                   >
-                    <MaterialCommunityIcons name="plus-circle" size={20} color="#6366F1" />
+                    <MaterialCommunityIcons name="plus-circle" size={18} color="#6366F1" />
                     <Text style={styles.emptyStateButtonText}>Create Your First Goal</Text>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
               filteredGoals.map((goal) => {
-                const categoryColor = getCategoryColor(goal.category);
+                const gradient = getCategoryGradient(goal.category);
+                const categoryIcon = getCategoryIcon(goal.category);
+                const iconColor = getCategoryIconColor(goal.category);
+                const pledgeAmount = TokenService.formatTokenAmount(goal.pledgedTokens);
                 return (
                   <TouchableOpacity
                     key={goal.id}
-                    style={[styles.goalCard, { borderLeftColor: categoryColor }]}
+                    style={styles.goalCardWrapper}
                     onPress={() => setSelectedGoalId(goal.id)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
-                    <View style={styles.goalCardHeader}>
-                      <View style={styles.goalIconContainer}>
-                        <MaterialCommunityIcons name="target" size={24} color={categoryColor} />
-                      </View>
-                      <View style={styles.goalCardContent}>
-                        <Text style={styles.goalTitle}>{goal.title}</Text>
-                        {goal.description && (
-                          <Text style={styles.goalDescription} numberOfLines={2}>
-                            {goal.description}
-                          </Text>
+                    <LinearGradient
+                      colors={gradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.goalCard}
+                    >
+                      <View style={styles.goalCardHeader}>
+                        <View style={styles.goalIconContainer}>
+                          <MaterialCommunityIcons name={categoryIcon as any} size={24} color={iconColor} />
+                        </View>
+                        <View style={styles.goalCardContent}>
+                          <Text style={styles.goalTitle} numberOfLines={2}>{goal.title}</Text>
+                          <View style={styles.goalCardPledgeSection}>
+                            <Text style={styles.goalPledgeAmountLarge}>
+                              {pledgeAmount.replace(' ADA', '')}
+                            </Text>
+                            <MaterialCommunityIcons name="star-circle" size={16} color={iconColor} style={styles.cardanoIcon} />
+                          </View>
+                        </View>
+                        {goal.status && (
+                          <View style={styles.statusBadge}>
+                            <Text style={styles.statusBadgeText}>
+                              {goal.status === 'done' ? 'Done' : goal.status === 'partially_done' ? 'In Progress' : 'Pending'}
+                            </Text>
+                          </View>
                         )}
                       </View>
-                    </View>
-                    <Text style={styles.goalPledgeAmount}>
-                      Pledged: {TokenService.formatTokenAmount(goal.pledgedTokens)}
-                    </Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 );
               })
@@ -824,53 +939,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   formHeaderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.3,
   },
   formScrollView: {
     flex: 1,
   },
   formScrollContent: {
-    padding: 16,
-    paddingBottom: 100,
+    padding: 20,
+    paddingBottom: 120,
   },
   compactForm: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    gap: 16,
+    borderRadius: 16,
+    padding: 20,
+    gap: 20,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   compactLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 6,
+    marginBottom: 8,
+    letterSpacing: -0.15,
+  },
+  penaltyWarning: {
+    fontSize: 11,
+    color: '#F59E0B',
+    marginTop: 4,
+    fontWeight: '500',
   },
   compactInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
     fontSize: 15,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
     color: '#111827',
+    letterSpacing: -0.1,
   },
   compactTextArea: {
-    height: 70,
+    height: 80,
     textAlignVertical: 'top',
-    paddingTop: 12,
+    paddingTop: 14,
+    lineHeight: 20,
   },
   compactRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 14,
   },
   compactRowItem: {
     flex: 1,
@@ -879,31 +1016,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
   },
   compactDropdownText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#111827',
     flex: 1,
+    letterSpacing: -0.1,
   },
   compactDateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
+    gap: 10,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#FFFFFF',
   },
   compactDateText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#111827',
     flex: 1,
+    letterSpacing: -0.1,
   },
   compactDatePlaceholder: {
     color: '#9CA3AF',
@@ -911,18 +1050,19 @@ const styles = StyleSheet.create({
   compactSwitchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    padding: 12,
+    gap: 12,
+    padding: 16,
     backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 12,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
   },
   compactSwitchLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: '#111827',
     fontWeight: '500',
+    letterSpacing: -0.1,
   },
   stickyBottomBar: {
     position: 'absolute',
@@ -930,22 +1070,24 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    padding: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
     gap: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F3F4F6',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 10,
   },
   stickyButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -953,7 +1095,7 @@ const styles = StyleSheet.create({
   },
   stickyCancelButton: {
     backgroundColor: '#F9FAFB',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
   },
   stickySubmitButton: {
@@ -961,27 +1103,28 @@ const styles = StyleSheet.create({
     shadowColor: '#6366F1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 5,
   },
   stickyCancelText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#6B7280',
+    letterSpacing: -0.2,
   },
   stickySubmitText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: -0.2,
   },
   header: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 22,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderBottomColor: '#F3F4F6',
   },
   backButton: {
     marginRight: 4,
@@ -989,65 +1132,124 @@ const styles = StyleSheet.create({
   headerContent: {
     flex: 1,
   },
+  titleContainer: {
+    marginBottom: 6,
+  },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#6366F1',
-    marginBottom: 4,
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.5,
+    lineHeight: 38,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6B7280',
+    letterSpacing: -0.2,
+    lineHeight: 21,
+  },
+  filterTabsContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   filterTabs: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    paddingHorizontal: 20,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    padding: 5,
+    gap: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   filterTab: {
-    paddingVertical: 12,
+    flex: 1,
+    paddingVertical: 11,
     paddingHorizontal: 16,
-    marginRight: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
   },
   filterTabActive: {
-    borderBottomColor: '#6366F1',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
   filterTabText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#6B7280',
+    letterSpacing: -0.15,
   },
   filterTabTextActive: {
     color: '#6366F1',
     fontWeight: '600',
+    letterSpacing: -0.2,
   },
   balanceCard: {
-    margin: 16,
-    padding: 20,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 12,
+    padding: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#F3F4F6',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+    overflow: 'hidden',
+  },
+  balanceCardContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  balanceLeftSection: {
+    flex: 1,
+    zIndex: 1,
   },
   balanceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 12,
+  },
+  balanceCardanoLogo: {
+    position: 'absolute',
+    right: -40,
+    top: -20,
+    opacity: 0.3,
+    zIndex: 0,
+  },
+  balanceIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
   },
   balanceLabel: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#6B7280',
+    letterSpacing: -0.1,
   },
   balanceAmounts: {
     flexDirection: 'row',
@@ -1057,39 +1259,56 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   balanceAmount: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
   balanceAmountRDM: {
     color: '#10B981',
   },
   balanceCurrency: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#9CA3AF',
+    letterSpacing: -0.1,
+    textTransform: 'uppercase',
+  },
+  createButtonWrapper: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#0033AD',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   createButton: {
-    margin: 16,
-    padding: 18,
-    backgroundColor: '#6366F1',
-    borderRadius: 12,
-    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  createButtonIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   createButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    fontWeight: '600',
+    letterSpacing: -0.2,
   },
   createForm: {
     margin: 16,
@@ -1384,94 +1603,119 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   goalsList: {
-    padding: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   emptyState: {
     alignItems: 'center',
-    padding: 48,
-    marginTop: 40,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    marginTop: 12,
   },
   emptyStateIconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
-    borderWidth: 2,
+    marginBottom: 18,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   emptyText: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 6,
+    letterSpacing: -0.3,
+    lineHeight: 24,
   },
   emptySubtext: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: 20,
+    lineHeight: 18,
+    paddingHorizontal: 24,
+    letterSpacing: -0.1,
   },
   emptyStateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#EDE9FE',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
+    gap: 7,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#6366F1',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
   },
   emptyStateButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#6366F1',
+    letterSpacing: -0.15,
   },
-  goalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    marginHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderLeftWidth: 4,
+  goalCardWrapper: {
+    marginBottom: 10,
+    marginHorizontal: 20,
+    borderRadius: 14,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
+  },
+  goalCard: {
+    borderRadius: 14,
+    padding: 14,
+    minHeight: 100,
   },
   goalCardHeader: {
     flexDirection: 'row',
-    marginBottom: 16,
+    alignItems: 'center',
+    gap: 12,
   },
   goalIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F3F4F6',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   goalCardContent: {
     flex: 1,
   },
   goalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  goalDescription: {
     fontSize: 14,
-    color: '#6B7280',
+    fontWeight: '600',
+    color: '#111827',
+    letterSpacing: -0.2,
     lineHeight: 20,
+    marginBottom: 6,
+  },
+  goalCardPledgeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  goalPledgeAmountLarge: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.3,
+    marginRight: 6,
+  },
+  cardanoIcon: {
+    opacity: 0.8,
   },
   progressSection: {
     marginBottom: 16,
@@ -1504,13 +1748,19 @@ const styles = StyleSheet.create({
     color: '#111827',
     minWidth: 40,
   },
-  goalCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+    letterSpacing: 0.1,
   },
   sdgBadge: {
     backgroundColor: '#10B981',
@@ -1528,10 +1778,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  goalPledgeAmount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6366F1',
+  pledgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
   },
   streakIcon: {
     marginLeft: 8,
@@ -1542,3 +1795,4 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
   },
 });
+

@@ -14,7 +14,9 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
-import { VictoryPie, VictoryChart, VictoryBar, VictoryTheme } from 'victory-native';
+// Note: Victory-native v41 uses different API (Pie, CartesianChart, Bar)
+// Chart temporarily disabled - will implement with new API later
+// import { Pie } from 'victory-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Medaa2Agent } from '../services/medaa2Agent';
 import { PurseType, SmartContractTransaction } from '../types/rdm';
@@ -112,25 +114,14 @@ export const Medaa2TokenDashboard: React.FC<Medaa2TokenDashboardProps> = ({ agen
         <View style={styles.chartCard}>
           <Text style={styles.sectionTitle}>Purse Distribution</Text>
           <View style={styles.chartContainer}>
-            <VictoryPie
-              data={getPurseChartData()}
-              width={CHART_SIZE}
-              height={CHART_SIZE}
-              colorScale={getPurseChartData().map((d) => d.color)}
-              innerRadius={60}
-              labelRadius={({ innerRadius }: any) => innerRadius + 30}
-              style={{
-                labels: {
-                  fill: '#111827',
-                  fontSize: 12,
-                  fontWeight: '600',
-                },
-              }}
-              animate={{
-                duration: 1000,
-                onLoad: { duration: 500 },
-              }}
-            />
+            {/* Chart temporarily replaced with percentage list - will implement Pie chart with victory-native v41 API */}
+            {getPurseChartData().map((item, index) => (
+              <View key={index} style={styles.distributionItem}>
+                <View style={[styles.distributionColor, { backgroundColor: item.color }]} />
+                <Text style={styles.distributionLabel}>{item.x}</Text>
+                <Text style={styles.distributionValue}>{item.y.toFixed(1)}%</Text>
+              </View>
+            ))}
           </View>
         </View>
       )}
@@ -373,13 +364,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   bonusCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FEF3C7',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#FDE68A',
-    backgroundColor: '#FEF3C7',
   },
   bonusHeader: {
     flexDirection: 'row',
@@ -412,6 +402,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     marginTop: 4,
+  },
+  distributionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginVertical: 4,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+  },
+  distributionColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  distributionLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  distributionValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0033AD',
   },
 });
 

@@ -5,6 +5,7 @@
 import { GeminiService } from './geminiService';
 import { TokenService } from './tokenService';
 import { MockSmartContractService } from './mockSmartContract';
+import { PlutusSmartContractService } from './plutusSmartContract';
 import { Medaa1Agent } from './medaa1Agent';
 import { Medaa2Agent } from './medaa2Agent';
 import { Medaa3Agent } from './medaa3Agent';
@@ -16,11 +17,16 @@ import { VerificationService } from './verificationService';
 import { MediaService } from './mediaService';
 import { getMasumiClient } from './masumiClient';
 import { getAgentNetwork } from './agentNetwork';
+import { WalletService } from './walletService';
+import { areContractsDeployed, getContractAddresses } from '../config/contractAddresses';
+
+// Union type for smart contract service (supports both mock and real)
+export type SmartContractService = MockSmartContractService | PlutusSmartContractService;
 
 export interface RDMServiceContainer {
   geminiService: GeminiService;
   tokenService: TokenService;
-  smartContractService: MockSmartContractService;
+  smartContractService: SmartContractService;
   medaa1Agent: Medaa1Agent;
   medaa2Agent: Medaa2Agent;
   medaa3Agent: Medaa3Agent;
@@ -45,7 +51,10 @@ export async function initializeRDMServices(): Promise<RDMServiceContainer> {
   // Initialize core services
   const geminiService = new GeminiService();
   const tokenService = new TokenService();
-  const smartContractService = new MockSmartContractService(tokenService);
+  
+  // Initialize smart contract service (real contracts with fallback to mock)
+  const smartContractService = initializeSmartContractService(tokenService);
+  
   const verificationService = new VerificationService();
   const mediaService = new MediaService();
 
@@ -55,16 +64,16 @@ export async function initializeRDMServices(): Promise<RDMServiceContainer> {
   const liquidityPoolService = new LiquidityPoolService();
   const vaultService = new VaultService(geminiService);
 
-  // Initialize token service with timeout
+  // Initialize token service with timeout (increased to 10 seconds for slow networks)
   try {
     const tokenInitPromise = tokenService.initialize();
     const tokenInitTimeout = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Token service initialization timeout')), 5000)
+      setTimeout(() => reject(new Error('Token service initialization timeout')), 10000)
     );
     await Promise.race([tokenInitPromise, tokenInitTimeout]);
   } catch (error) {
-    console.warn('Token service initialization failed or timed out:', error);
-    // Continue anyway - token service will work with default values
+    // Silently continue - token service will work with default values
+    // Balance will be refreshed when wallet connects
   }
 
   // Initialize agents with new services
@@ -104,18 +113,23 @@ export async function initializeRDMServices(): Promise<RDMServiceContainer> {
     }),
   ];
   
-  // Add overall timeout for agent initialization
+  // Add overall timeout for agent initialization (increased to 15 seconds for slow networks)
+  // Agents can initialize in parallel, so this should be enough time
   const agentInitTimeout = new Promise((resolve) => 
     setTimeout(() => {
-      console.warn('Agent initialization timeout - continuing with partial initialization');
+      // Don't log warning - agents may still be initializing in background
       resolve(false);
-    }, 8000)
+    }, 15000)
   );
   
-  await Promise.race([
-    Promise.all(agentInitPromises),
-    agentInitTimeout
-  ]);
+  try {
+    await Promise.race([
+      Promise.all(agentInitPromises),
+      agentInitTimeout
+    ]);
+  } catch (error) {
+    // Silently continue - agents will work with partial initialization
+  }
 
   // Initialize Masumi connection (if configured) - non-blocking with timeout
   // Don't wait for this to complete, initialize in background
@@ -152,6 +166,40 @@ export function getRDMServices(): RDMServiceContainer {
 }
 
 /**
+ * Initialize smart contract service with safe fallback
+ * Tries to use real Plutus contracts if deployed, otherwise falls back to mock
+ */
+function initializeSmartContractService(tokenService: TokenService): SmartContractService {
+  try {
+    const wallet = WalletService.getConnectedWalletSync();
+    const network = wallet?.network || 'preprod';
+    
+    // Check if contracts are deployed
+    const contractsDeployed = areContractsDeployed(network as 'preprod' | 'mainnet');
+    
+    if (contractsDeployed && wallet) {
+      // Use real Plutus contracts
+      console.log('✅ Using real Plutus smart contracts');
+      const plutusService = new PlutusSmartContractService(tokenService);
+      
+      // Update contract addresses
+      const addresses = getContractAddresses(network as 'preprod' | 'mainnet');
+      plutusService.updateContractAddresses(addresses);
+      
+      return plutusService;
+    } else {
+      // Fallback to mock contracts
+      console.log('⚠️  Using mock smart contracts (real contracts not deployed or wallet not connected)');
+      return new MockSmartContractService(tokenService);
+    }
+  } catch (error) {
+    // Safe fallback on any error
+    console.warn('⚠️  Error initializing real contracts, using mock:', error);
+    return new MockSmartContractService(tokenService);
+  }
+}
+
+/**
  * Initialize Masumi connection in background (non-blocking)
  */
 async function initializeMasumiConnection(): Promise<void> {
@@ -177,9 +225,12 @@ async function initializeMasumiConnection(): Promise<void> {
       
       // Query registered agents from Masumi (with timeout)
       try {
-        const agentsPromise = masumiClient.queryAgents();
+        // Convert network format: PREPROD -> Preprod, MAINNET -> Mainnet
+        // masumiClient.queryAgents will handle the conversion, but we pass the config value
+        const networkFormat = masumiConfig.network === 'PREPROD' ? 'Preprod' : 'Mainnet';
+        const agentsPromise = masumiClient.queryAgents({ network: networkFormat });
         const agentsTimeout = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Query agents timeout')), 3000)
+          setTimeout(() => reject(new Error('Query agents timeout')), 5000)
         );
         const agents = await Promise.race([agentsPromise, agentsTimeout]) as any[];
         console.log(`📡 Found ${agents.length} registered agents on Masumi network`);

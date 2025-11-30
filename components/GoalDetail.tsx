@@ -141,10 +141,10 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
   };
 
   const formatTokenAmount = (tokens: TokenAmount): string => {
-    if (tokens.rdmTokens && tokens.rdmTokens > 0) {
-      return `${tokens.rdmTokens} RDM`;
-    }
-    return `${TokenService.formatADA(tokens.ada)} ADA`;
+    // Show only ADA, hide RDM
+    // Note: tokens.ada is already in ADA (not lovelace), so format directly
+    const adaAmount = tokens.ada || 0;
+    return `${adaAmount.toFixed(2)} ADA`;
   };
 
   const formatDate = (date: Date | string): string => {
@@ -367,7 +367,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
         {/* Dashboard Card - Goal Overview */}
         <View style={[styles.dashboardCard, { borderLeftColor: categoryColor, shadowColor: categoryColor }]}>
           <View style={styles.dashboardHeader}>
-            <MaterialCommunityIcons name="target" size={24} color={categoryColor} />
+            <MaterialCommunityIcons name="target" size={20} color={categoryColor} />
             <Text style={styles.dashboardTitle}>Goal Overview</Text>
             {goal.sdgAlignment && goal.sdgAlignment.length > 0 && (
               <View style={styles.sdgTag}>
@@ -378,15 +378,14 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
             )}
           </View>
 
-          {/* Progress Ring (simplified as percentage display) */}
+          {/* Progress Ring - Compact */}
           <View style={styles.progressContainer}>
             <View style={[styles.progressCircle, { 
               borderColor: categoryColor,
-              backgroundColor: progress > 0 ? `${categoryColor}15` : '#F3F4F6',
+              backgroundColor: progress > 0 ? `${categoryColor}10` : '#F9FAFB',
             }]}>
               <Text style={[styles.progressText, { 
                 color: progress > 0 ? categoryColor : '#9CA3AF',
-                fontSize: progress > 0 ? 32 : 24,
               }]}>
                 {Math.round(progress)}%
               </Text>
@@ -396,27 +395,27 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
             </View>
           </View>
 
-          {/* Stats Grid 2x2 */}
+          {/* Stats Grid 2x2 - Compact */}
           <View style={styles.statsGrid}>
             <View style={styles.statCard}>
-              <MaterialCommunityIcons name="wallet" size={20} color="#6366F1" />
+              <MaterialCommunityIcons name="wallet" size={17} color="#6366F1" />
               <Text style={styles.statValue}>{formatTokenAmount(goal.pledgedTokens)}</Text>
               <Text style={styles.statLabel}>Pledged</Text>
             </View>
             <View style={styles.statCard}>
-              <MaterialCommunityIcons name="fire" size={20} color="#F59E0B" />
+              <MaterialCommunityIcons name="fire" size={17} color="#F59E0B" />
               <Text style={styles.statValue}>{goal.streak_days || 0}</Text>
               <Text style={styles.statLabel}>Streak</Text>
             </View>
             <View style={styles.statCard}>
-              <MaterialCommunityIcons name="message-text" size={20} color="#3B82F6" />
+              <MaterialCommunityIcons name="message-text" size={17} color="#3B82F6" />
               <Text style={styles.statValue}>{goal.days_with_reflections || reflections.length}</Text>
               <Text style={styles.statLabel}>Reflections</Text>
             </View>
             <View style={styles.statCard}>
               <MaterialCommunityIcons 
                 name={goal.status === 'done' ? 'check-circle' : 'clock-outline'} 
-                size={20} 
+                size={17} 
                 color={goal.status === 'done' ? '#10B981' : '#6B7280'} 
               />
               <Text style={[styles.statValue, { 
@@ -428,11 +427,11 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
             </View>
           </View>
 
-          {/* Dates & Verification - Compact Layout */}
+          {/* Dates & Verification - Ultra Compact */}
           <View style={styles.metaInfoContainer}>
             <View style={styles.metaInfoRow}>
               <View style={styles.metaInfoItem}>
-                <MaterialCommunityIcons name="calendar-start" size={16} color="#6B7280" />
+                <MaterialCommunityIcons name="calendar-start" size={14} color="#6B7280" />
                 <Text style={styles.metaInfoLabel}>Start</Text>
                 <Text style={styles.metaInfoValue}>
                   {formatDate(ensureDate(goal.timeWindow?.startDate || goal.createdAt))}
@@ -440,7 +439,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
               </View>
               <View style={styles.metaInfoDivider} />
               <View style={styles.metaInfoItem}>
-                <MaterialCommunityIcons name="calendar-end" size={16} color="#6B7280" />
+                <MaterialCommunityIcons name="calendar-end" size={14} color="#6B7280" />
                 <Text style={styles.metaInfoLabel}>End</Text>
                 <Text style={styles.metaInfoValue}>
                   {formatDate(ensureDate(goal.timeWindow?.endDate || goal.targetDate))}
@@ -448,7 +447,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
               </View>
             </View>
             <View style={styles.verificationBadge}>
-              <MaterialCommunityIcons name="shield-check" size={14} color="#6366F1" />
+              <MaterialCommunityIcons name="shield-check" size={12} color="#6366F1" />
               <Text style={styles.verificationBadgeText}>Self Report</Text>
             </View>
           </View>
@@ -458,14 +457,14 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
         <View style={styles.timelineCard}>
           <View style={styles.timelineHeader}>
             <View style={styles.timelineHeaderLeft}>
-              <MaterialCommunityIcons name="clock-outline" size={24} color="#6366F1" />
+              <MaterialCommunityIcons name="clock-outline" size={19} color="#6366F1" />
               <Text style={styles.timelineTitle}>Timeline</Text>
             </View>
           </View>
 
           <View style={styles.timelineContent}>
             <View style={styles.timelineItem}>
-              <MaterialCommunityIcons name="flag" size={20} color="#10B981" />
+              <MaterialCommunityIcons name="flag" size={16} color="#10B981" />
               <Text style={styles.timelineLabel}>Start</Text>
               <Text style={styles.timelineValue}>
                 {formatDate(ensureDate(goal.timeWindow?.startDate || goal.createdAt))}
@@ -492,7 +491,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
             </View>
 
             <View style={styles.timelineItem}>
-              <MaterialCommunityIcons name="flag" size={20} color="#EF4444" />
+              <MaterialCommunityIcons name="flag" size={16} color="#EF4444" />
               <Text style={styles.timelineLabel}>End</Text>
               <Text style={styles.timelineValue}>
                 {formatDate(ensureDate(goal.timeWindow?.endDate || goal.targetDate))}
@@ -523,7 +522,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
             <View style={styles.milestonesContainer}>
               <Text style={styles.milestonesTitle}>Milestones</Text>
               <View style={styles.milestoneItem}>
-                <MaterialCommunityIcons name="check-circle" size={18} color="#10B981" />
+                <MaterialCommunityIcons name="check-circle" size={16} color="#10B981" />
                 <Text style={styles.milestoneText}>Goal Created</Text>
                 <Text style={styles.milestoneDate}>{formatDate(ensureDate(goal.createdAt))}</Text>
               </View>
@@ -535,14 +534,12 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
         <View style={styles.strugglingCard}>
           <View style={styles.strugglingHeader}>
             <View style={styles.strugglingIconContainer}>
-              <MaterialCommunityIcons name="alert-circle" size={24} color="#6366F1" />
+              <MaterialCommunityIcons name="alert-circle" size={16} color="#6366F1" />
             </View>
             <Text style={styles.strugglingTitle}>Struggling with this goal?</Text>
           </View>
           <Text style={styles.strugglingText}>
-            Get connected with mentors or buddies who are succeeding at similar habits. 
-            Automatically connects you with someone succeeding at that habit for peer mentorship 
-            OR simply connect to a buddy of your choice.
+            Get connected with mentors or buddies who are succeeding at similar habits.
           </Text>
           <View style={styles.strugglingButtons}>
             <TouchableOpacity 
@@ -550,7 +547,7 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
               onPress={handleGetHelp}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="star" size={18} color="#FFFFFF" />
+              <MaterialCommunityIcons name="star" size={16} color="#FFFFFF" />
               <Text style={styles.helpButtonText}>Get Help</Text>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -558,8 +555,8 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
               onPress={() => onNavigate?.('marketplace')}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="open-in-new" size={18} color="#6366F1" />
-              <Text style={[styles.helpButtonText, { color: '#6366F1' }]}>Browse Marketplace</Text>
+              <MaterialCommunityIcons name="open-in-new" size={16} color="#6366F1" />
+              <Text style={[styles.helpButtonText, { color: '#6366F1' }]}>Browse</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -567,13 +564,13 @@ export const GoalDetail: React.FC<GoalDetailProps> = ({
         {/* Reflections & Check-ins Section */}
         <View style={styles.reflectionsCard}>
           <View style={styles.reflectionsHeader}>
-            <MaterialCommunityIcons name="message-text" size={24} color="#6366F1" />
+            <MaterialCommunityIcons name="message-text" size={20} color="#6366F1" />
             <Text style={styles.reflectionsTitle}>Reflections & Check-ins</Text>
             <TouchableOpacity 
               style={styles.addReflectionButton}
               onPress={() => setShowReflectionModal(true)}
             >
-              <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" />
+              <MaterialCommunityIcons name="plus" size={16} color="#FFFFFF" />
               <Text style={styles.addReflectionButtonText}>Add Reflection</Text>
             </TouchableOpacity>
           </View>
@@ -924,23 +921,25 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   backButton: {
-    padding: 8,
+    padding: 4,
     marginRight: 8,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.3,
   },
   headerSpacer: {
-    width: 40,
+    width: 36,
   },
   scrollView: {
     flex: 1,
@@ -948,100 +947,108 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingBottom: 100,
-    gap: 16,
+    gap: 10,
   },
   dashboardCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 24,
+    padding: 18,
     borderLeftWidth: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 3,
   },
   dashboardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    gap: 8,
+    marginBottom: 16,
+    gap: 10,
   },
   dashboardTitle: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   sdgTag: {
     backgroundColor: '#10B981',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   sdgTagText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
   },
   progressContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   progressCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 8,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 6,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
   },
   progressText: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   progressSubtext: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#9CA3AF',
-    marginTop: 4,
+    marginTop: 3,
+    fontWeight: '500',
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 16,
   },
   statCard: {
     width: '48%',
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderWidth: 1.5,
+    borderColor: '#F3F4F6',
+    minHeight: 80,
+    justifyContent: 'center',
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: 6,
+    marginBottom: 3,
+    letterSpacing: -0.3,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
+    fontWeight: '500',
+    letterSpacing: -0.1,
   },
   metaInfoContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1.5,
     borderTopColor: '#F3F4F6',
   },
   metaInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   metaInfoItem: {
     flex: 1,
@@ -1050,30 +1057,30 @@ const styles = StyleSheet.create({
   },
   metaInfoDivider: {
     width: 1,
-    height: 40,
+    height: 28,
     backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   metaInfoLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#6B7280',
-    marginTop: 4,
+    marginTop: 1,
   },
   metaInfoValue: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#111827',
   },
   verificationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     alignSelf: 'center',
     backgroundColor: '#EDE9FE',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 4,
   },
   verificationBadgeText: {
     fontSize: 12,
@@ -1083,83 +1090,88 @@ const styles = StyleSheet.create({
   timelineCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 24,
+    padding: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 3,
   },
   timelineHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   timelineHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   timelineTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   timelineContent: {
-    gap: 16,
+    gap: 8,
   },
   timelineItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   timelineLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#6B7280',
     marginRight: 'auto',
+    fontWeight: '500',
   },
   timelineValue: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#111827',
+    letterSpacing: -0.1,
   },
   progressBarContainer: {
-    marginVertical: 12,
+    marginVertical: 6,
   },
   progressBarBackground: {
-    height: 8,
+    height: 5,
     backgroundColor: '#E5E7EB',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 3,
   },
   progressBarLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 1,
   },
   progressBarLabelItem: {
     alignItems: 'center',
   },
   progressBarText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   progressBarSubtext: {
-    fontSize: 11,
+    fontSize: 9,
     color: '#6B7280',
-    marginTop: 2,
+    marginTop: 1,
+    fontWeight: '500',
   },
   timelineMeta: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1.5,
     borderTopColor: '#F3F4F6',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1168,138 +1180,150 @@ const styles = StyleSheet.create({
   timelineMetaItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 6,
+    gap: 3,
   },
   timelineMetaDivider: {
     width: 1,
-    height: 40,
+    height: 28,
     backgroundColor: '#E5E7EB',
   },
   timelineMetaLabel: {
-    fontSize: 14,
+    fontSize: 10,
     color: '#6B7280',
+    fontWeight: '500',
   },
   timelineMetaValue: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#111827',
+    letterSpacing: -0.1,
   },
   statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   statusPillText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   milestonesContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1.5,
+    borderTopColor: '#F3F4F6',
   },
   milestonesTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 8,
+    letterSpacing: -0.15,
   },
   milestoneItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   milestoneText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     color: '#111827',
   },
   milestoneDate: {
-    fontSize: 14,
+    fontSize: 10,
     color: '#6B7280',
   },
   strugglingCard: {
-    backgroundColor: '#EDE9FE',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   strugglingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 8,
+    gap: 10,
   },
   strugglingIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   strugglingTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   strugglingText: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 16,
+    lineHeight: 15,
+    marginBottom: 10,
+    letterSpacing: -0.1,
   },
   strugglingButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   helpButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    gap: 5,
   },
   getHelpButton: {
     backgroundColor: '#6366F1',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   browseButton: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#6366F1',
   },
   helpButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+    letterSpacing: -0.15,
   },
   reflectionsCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: 14,
+    padding: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   reflectionsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   reflectionsTitle: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.2,
   },
   addReflectionButton: {
     flexDirection: 'row',
@@ -1307,95 +1331,109 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366F1',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
     gap: 4,
   },
   addReflectionButtonText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+    letterSpacing: -0.1,
   },
   emptyReflections: {
     alignItems: 'center',
-    padding: 48,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
   },
   emptyReflectionsIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
   },
   emptyReflectionsText: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 5,
+    letterSpacing: -0.3,
   },
   emptyReflectionsSubtext: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: 18,
+    lineHeight: 17,
+    paddingHorizontal: 20,
+    letterSpacing: -0.1,
   },
   emptyStateAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#EDE9FE',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#6366F1',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 1,
   },
   emptyStateAddButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     color: '#6366F1',
+    letterSpacing: -0.15,
   },
   reflectionsList: {
-    gap: 12,
+    gap: 8,
   },
   reflectionCard: {
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
+    padding: 12,
+    borderLeftWidth: 3,
     borderLeftColor: '#6366F1',
-    marginBottom: 12,
+    marginBottom: 0,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#F3F4F6',
     borderRightWidth: 1,
   },
   reflectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   reflectionDate: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#6B7280',
   },
   reflectionStatusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   reflectionStatusText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
   },
   reflectionNotes: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#111827',
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 17,
+    marginBottom: 6,
+    letterSpacing: -0.1,
   },
   verificationBadge: {
     flexDirection: 'row',
@@ -1410,19 +1448,19 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 18,
+    bottom: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#6366F1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 10,
+    elevation: 6,
   },
   modalOverlay: {
     flex: 1,
@@ -1617,21 +1655,21 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   reflectionPercentage: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#6366F1',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   reflectionAdditionalNotes: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#6B7280',
     fontStyle: 'italic',
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 6,
+    marginBottom: 6,
   },
   reflectionMediaContainer: {
-    marginTop: 8,
-    padding: 8,
+    marginTop: 6,
+    padding: 6,
     backgroundColor: '#EFF6FF',
     borderRadius: 6,
   },
@@ -1677,4 +1715,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
 });
+
+
 

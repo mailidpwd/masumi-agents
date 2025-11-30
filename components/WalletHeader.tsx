@@ -16,7 +16,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WalletInfo } from '../types/cardano';
 import { WalletService } from '../services/walletService';
-import { TokenAmount } from '../types/rdm';
+import { TokenAmount, PurseType } from '../types/rdm';
 import { getNetworkConfig } from '../services/networkConfig';
 
 interface WalletHeaderProps {
@@ -35,7 +35,8 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
   useEffect(() => {
     if (wallet) {
       loadBalance();
-      // Refresh balance every 10 seconds
+      // Update balance every 10 seconds to stay in sync with Base Purse Balance card
+      // Both now read from tokenService, so they'll show the same deducted balance
       const interval = setInterval(loadBalance, 10000);
       return () => clearInterval(interval);
     } else {
@@ -49,36 +50,38 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
     try {
       setLoading(true);
       
-      // Get real balance from Blockfrost API via WalletService
+      // PRIMARY: Get base purse balance (with local deductions) to match Base Purse Balance card
+      // Both wallet header and Base Purse Balance card show the same deducted balance
+      // This makes it clear to users what balance they have available
       try {
-        const fullBalance = await WalletService.getFullBalance();
+        const { getRDMServices, initializeRDMServices } = await import('../services/agentInitializer');
+        
+        // Try to get services first, initialize if needed
+        let services;
+        try {
+          services = getRDMServices();
+        } catch (error) {
+          // Services not initialized yet - initialize them first
+          console.log('RDM services not initialized yet, initializing...');
+          await initializeRDMServices();
+          services = getRDMServices();
+        }
+        
+        const basePurse = services.tokenService.getPurseBalance(PurseType.BASE);
         setBalance({
-          ada: fullBalance.ada,
-          rdmTokens: parseInt(fullBalance.rdmTokens, 10) || 0,
+          ada: basePurse.ada || 0,
+          rdmTokens: basePurse.rdmTokens || 0,
         });
       } catch (error) {
-        console.error('Failed to load balance from Blockfrost:', error);
-        // Fallback: Try to get balance from RDM services if available
+        console.error('Failed to load balance from token service:', error);
+        // Fallback: Try blockchain directly
         try {
-          const { getRDMServices } = await import('../services/agentInitializer');
-          const services = getRDMServices();
-          const allPurses = services.tokenService.getAllPurses();
-          
-          // Calculate total ADA and RDM across all purses
-          let totalADA = 0;
-          let totalRDM = 0;
-          
-          Object.values(allPurses).forEach((purse: any) => {
-            totalADA += purse.balance?.ada || 0;
-            totalRDM += (purse.balance?.rdmTokens || 0);
-          });
-          
+          const fullBalance = await WalletService.getFullBalance();
           setBalance({
-            ada: totalADA || 0,
-            rdmTokens: totalRDM || 0,
+            ada: fullBalance.ada,
+            rdmTokens: parseInt(fullBalance.rdmTokens, 10) || 0,
           });
         } catch {
-          // If all fail, set to 0
           setBalance({ ada: 0, rdmTokens: 0 });
         }
       }
@@ -201,12 +204,7 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
             </Text>
             <Text style={styles.balanceLabel}>ADA</Text>
           </View>
-          <View style={styles.rdmBalance}>
-            <Text style={styles.rdmValue}>
-              {loading ? '...' : formatNumber(balance.rdmTokens)}
-            </Text>
-            <Text style={styles.rdmLabel}>RDM</Text>
-          </View>
+          {/* RDM balance hidden - showing only ADA */}
         </View>
 
         <MaterialCommunityIcons
@@ -307,10 +305,7 @@ export const WalletHeader: React.FC<WalletHeaderProps> = ({
                   </Text>
                 </View>
                 <View style={styles.balanceRow}>
-                  <Text style={styles.balanceRowLabel}>RDM:</Text>
-                  <Text style={styles.balanceRowValue}>
-                    {loading ? '...' : `${formatNumber(balance.rdmTokens)} RDM`}
-                  </Text>
+                  {/* RDM balance hidden - showing only ADA */}
                 </View>
               </View>
             </View>

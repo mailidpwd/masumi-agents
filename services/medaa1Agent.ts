@@ -753,10 +753,10 @@ Suggest 3 new daily goals that would help build good habits. Return them as a JS
     const structuredData = this.verificationService.formatForAgent2(verificationResult);
 
     // Only publish goal completed event if goal period has ended
-    if (now >= endDate) {
+    if (now >= endDate && goal.status !== 'pending') {
       await this.agentNetwork.publishGoalCompleted(
         goalId,
-        goal.status,
+        goal.status as 'done' | 'not_done' | 'partially_done',
         goal.pledgedTokens,
         'medaa1',
         structuredData // Include verification data

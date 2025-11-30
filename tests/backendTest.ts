@@ -59,11 +59,16 @@ export async function testBackendServices(): Promise<boolean> {
     );
     console.log(`✅ HabitNFT minted: ${nft.id}\n`);
 
+    // Qualify NFT for LP (check with user rating above threshold)
+    const userRating = 8.5; // Above 7.5 threshold
+    services.habitNFTService.checkLPQualification(nft.id, userRating);
+    console.log(`✅ HabitNFT LP qualified: ${nft.isLPQualified}\n`);
+
     // Test Liquidity Pool Service
     console.log('4. Testing Liquidity Pool Service...');
     const lpPool = services.liquidityPoolService.createLPPair(
       'test_user',
-      8.5,
+      userRating,
       nft,
       { ada: 1000 }
     );

@@ -1,8 +1,10 @@
 /**
  * Wallet Connection Component (Login-Style)
  * Redesigned as a clean login/email-style connection screen
+ * 
+ * Expo Go Compatible: WebView is conditionally loaded only in native builds
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, ComponentType } from 'react';
 import {
   View,
   Text,
@@ -17,7 +19,6 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { WalletService } from '../services/walletService';
 import { WalletInfo } from '../types/cardano';
@@ -25,6 +26,18 @@ import { CardanoNetwork, getNetworkConfig, getDefaultNetwork } from '../services
 import { Linking } from 'react-native';
 import * as LinkingExpo from 'expo-linking';
 import * as ClipboardExpo from 'expo-clipboard';
+import { FEATURES, isExpoGo } from '../utils/featureFlags';
+
+// Conditionally import WebView - only available in native builds, not Expo Go
+let WebView: ComponentType<any> | null = null;
+try {
+  if (FEATURES.WALLET_WEBVIEW) {
+    WebView = require('react-native-webview').WebView;
+  }
+} catch (e) {
+  console.log('📱 WebView not available (Expo Go mode)');
+  WebView = null;
+}
 
 interface WalletConnectionProps {
   onWalletConnected?: (wallet: WalletInfo) => void;
@@ -78,7 +91,7 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualAddress, setManualAddress] = useState('');
   const [waitingForWallet, setWaitingForWallet] = useState(false);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<any>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
@@ -287,8 +300,26 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   };
 
   const handleConnect = async () => {
-    if (Platform.OS === 'web') {
-      // For web, use WebView
+    // Check if in Expo Go mode
+    if (isExpoGo()) {
+      // In Expo Go, deep linking and WebView don't work well
+      // Show manual entry directly with helpful message
+      Alert.alert(
+        '📱 Expo Go Mode',
+        'You\'re running in Expo Go which has limited wallet connectivity.\n\nPlease enter your wallet address manually to connect.',
+        [
+          {
+            text: 'Enter Address',
+            onPress: () => setShowManualEntry(true),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    if (Platform.OS === 'web' && WebView) {
+      // For web with WebView available, use WebView
       setShowWebView(true);
       return;
     }
@@ -800,12 +831,24 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
           </View>
         )}
         
-        {/* Development Build Notice */}
+        {/* Environment Notice */}
         {Platform.OS !== 'web' && (
-          <View style={styles.devBuildNotice}>
-            <MaterialCommunityIcons name="information" size={20} color="#F59E0B" />
-            <Text style={styles.devBuildNoticeText}>
-              <Text style={{fontWeight: 'bold'}}>Note:</Text> Automatic connection requires a Development Build (not Expo Go). Manual entry works in all builds.
+          <View style={[styles.devBuildNotice, isExpoGo() && styles.expoGoNotice]}>
+            <MaterialCommunityIcons 
+              name={isExpoGo() ? "cellphone-link" : "information"} 
+              size={20} 
+              color={isExpoGo() ? "#7C3AED" : "#F59E0B"} 
+            />
+            <Text style={[styles.devBuildNoticeText, isExpoGo() && styles.expoGoNoticeText]}>
+              {isExpoGo() ? (
+                <>
+                  <Text style={{fontWeight: 'bold'}}>📱 Expo Go Mode:</Text> Use manual address entry to connect your wallet. Deep linking and WebView are not available.
+                </>
+              ) : (
+                <>
+                  <Text style={{fontWeight: 'bold'}}>Note:</Text> Automatic connection requires a Development Build. Manual entry works in all builds.
+                </>
+              )}
             </Text>
           </View>
         )}
@@ -864,39 +907,41 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
         </View>
       </View>
 
-      {/* WebView Modal for Real Wallet Connection */}
-      <Modal
-        visible={showWebView}
-        animationType="slide"
-        onRequestClose={() => setShowWebView(false)}
-      >
-        <View style={styles.webViewContainer}>
-          <View style={styles.webViewHeader}>
-            <Text style={styles.webViewTitle}>Connect {selectedWallet.charAt(0).toUpperCase() + selectedWallet.slice(1)} Wallet</Text>
-            <TouchableOpacity
-              onPress={() => setShowWebView(false)}
-              style={styles.webViewCloseButton}
-            >
-              <MaterialCommunityIcons name="close" size={24} color="#666" />
-            </TouchableOpacity>
+      {/* WebView Modal for Real Wallet Connection - Only in native builds */}
+      {WebView && (
+        <Modal
+          visible={showWebView}
+          animationType="slide"
+          onRequestClose={() => setShowWebView(false)}
+        >
+          <View style={styles.webViewContainer}>
+            <View style={styles.webViewHeader}>
+              <Text style={styles.webViewTitle}>Connect {selectedWallet.charAt(0).toUpperCase() + selectedWallet.slice(1)} Wallet</Text>
+              <TouchableOpacity
+                onPress={() => setShowWebView(false)}
+                style={styles.webViewCloseButton}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <WebView
+              ref={webViewRef}
+              source={{ html: getWalletConnectionHTML(selectedWallet, selectedNetwork) }}
+              onMessage={handleWebViewMessage}
+              style={styles.webView}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="#0033AD" />
+                  <Text style={styles.webViewLoadingText}>Loading wallet connection...</Text>
+                </View>
+              )}
+            />
           </View>
-          <WebView
-            ref={webViewRef}
-            source={{ html: getWalletConnectionHTML(selectedWallet, selectedNetwork) }}
-            onMessage={handleWebViewMessage}
-            style={styles.webView}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            startInLoadingState={true}
-            renderLoading={() => (
-              <View style={styles.webViewLoading}>
-                <ActivityIndicator size="large" color="#0033AD" />
-                <Text style={styles.webViewLoadingText}>Loading wallet connection...</Text>
-              </View>
-            )}
-          />
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       {/* Manual Address Entry Modal */}
       <Modal
@@ -1485,5 +1530,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#92400E',
     lineHeight: 18,
+  },
+  expoGoNotice: {
+    backgroundColor: '#EDE9FE',
+    borderColor: '#C4B5FD',
+  },
+  expoGoNoticeText: {
+    color: '#5B21B6',
   },
 });

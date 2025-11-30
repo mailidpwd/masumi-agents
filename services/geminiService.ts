@@ -62,9 +62,19 @@ export class GeminiService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error?.message || `API request failed with status ${response.status}`
-        );
+        const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
+        
+        // Handle leaked API key error gracefully
+        if (errorMessage.includes('leaked') || errorMessage.includes('reported')) {
+          console.warn('⚠️ Gemini API key is invalid or leaked. AI features will be disabled. Please update GEMINI_API_KEY in .env');
+          return {
+            success: false,
+            error: 'Gemini API key is invalid. Please update your API key in the .env file.',
+            message: 'AI features are temporarily unavailable. Please contact support to update your API key.',
+          };
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -129,6 +139,16 @@ export class GeminiService {
         message: text,
       };
     } catch (error) {
+      // Handle leaked/invalid API key errors gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('leaked') || errorMessage.includes('reported') || errorMessage.includes('invalid')) {
+        console.warn('⚠️ Gemini API key issue detected. AI features disabled.');
+        return {
+          success: false,
+          error: 'Gemini API key is invalid',
+          message: 'AI features are temporarily unavailable. Please update your API key.',
+        };
+      }
       console.error('Gemini API Error:', error);
       return {
         success: false,
@@ -193,9 +213,19 @@ Provide clear, accurate, and helpful answers about Cardano. If asked about somet
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error?.message || `API request failed with status ${response.status}`
-        );
+        const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
+        
+        // Handle leaked API key error gracefully
+        if (errorMessage.includes('leaked') || errorMessage.includes('reported')) {
+          console.warn('⚠️ Gemini API key is invalid or leaked. AI features will be disabled. Please update GEMINI_API_KEY in .env');
+          return {
+            success: false,
+            error: 'Gemini API key is invalid. Please update your API key in the .env file.',
+            message: 'AI features are temporarily unavailable. Please contact support to update your API key.',
+          };
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -260,6 +290,16 @@ Provide clear, accurate, and helpful answers about Cardano. If asked about somet
         message: text,
       };
     } catch (error) {
+      // Handle leaked/invalid API key errors gracefully
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('leaked') || errorMessage.includes('reported') || errorMessage.includes('invalid')) {
+        console.warn('⚠️ Gemini API key issue detected. AI features disabled.');
+        return {
+          success: false,
+          error: 'Gemini API key is invalid',
+          message: 'AI features are temporarily unavailable. Please update your API key.',
+        };
+      }
       console.error('Gemini API Error:', error);
       return {
         success: false,

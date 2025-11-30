@@ -156,6 +156,7 @@ export interface Mentor {
   rate: number; // Cost per hour in RDM tokens (e.g., 50)
   avatarInitials?: string; // Initials for avatar display
   avatarUrl?: string; // Optional avatar image URL
+  gender?: 'male' | 'female'; // Gender for avatar display
 }
 
 /**
@@ -171,6 +172,7 @@ export interface HabitBuddy {
   compatibility: number; // Calculated score (0-100%) indicating how well their habits align with the user's
   avatarInitials?: string; // Initials for avatar display
   avatarUrl?: string; // Optional avatar image URL
+  gender?: 'male' | 'female'; // Gender for avatar display
 }
 
 /**

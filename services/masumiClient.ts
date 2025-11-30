@@ -52,6 +52,7 @@ export class MasumiClient {
   private paymentServiceUrl: string;
   private registryServiceUrl: string;
   private apiKey: string;
+  private hasLoggedMasumiError: boolean = false;
 
   constructor() {
     this.paymentServiceUrl = masumiConfig.paymentServiceUrl;
@@ -218,8 +219,16 @@ export class MasumiClient {
    * Publish an event to Masumi network
    */
   async publishEvent(event: MasumiEvent): Promise<{ success: boolean; eventId?: string; error?: string }> {
+    // Skip Masumi publishing if API key is not configured (non-blocking)
+    if (!this.apiKey || this.apiKey.length === 0) {
+      console.warn('⚠️ Masumi API key not configured, skipping event publish');
+      return { success: false, error: 'API key not configured' };
+    }
+
     try {
-      const response = await fetch(`${this.paymentServiceUrl}/events`, {
+      // Try the events endpoint
+      const url = `${this.paymentServiceUrl}/events`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -234,6 +243,11 @@ export class MasumiClient {
       });
 
       if (!response.ok) {
+        // If endpoint doesn't exist (404), silently fail (Masumi might not support events endpoint yet)
+        if (response.status === 404) {
+          // Don't log - this is expected if events endpoint isn't implemented yet
+          return { success: false, error: 'Events endpoint not available' };
+        }
         const errorText = await response.text();
         throw new Error(`Failed to publish event: ${response.statusText} - ${errorText}`);
       }
@@ -244,20 +258,43 @@ export class MasumiClient {
         eventId: data.eventId || data.id,
       };
     } catch (error) {
-      console.error('Failed to publish event to Masumi:', error);
+      // Silently handle errors - don't spam console with Masumi errors
+      // Masumi event publishing is optional and shouldn't block local operations
+      // Only log unexpected errors (not 404s or endpoint unavailable)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (!errorMessage.includes('404') && 
+          !errorMessage.includes('not available') && 
+          !errorMessage.includes('Events endpoint')) {
+        // Only log once per session to avoid spam
+        if (!this.hasLoggedMasumiError) {
+          console.warn(`⚠️ Masumi event publishing unavailable - using local mode only`);
+          this.hasLoggedMasumiError = true;
+        }
+      }
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       };
     }
   }
 
   /**
    * Query registered agents
+   * Note: Registry endpoint is on Payment Service, not Registry Service
    */
-  async queryAgents(filters?: { agentName?: string; status?: string }): Promise<MasumiAgent[]> {
+  async queryAgents(filters?: { agentName?: string; status?: string; network?: string }): Promise<MasumiAgent[]> {
     try {
       const params = new URLSearchParams();
+      // Network is required - convert to proper format (Preprod, not PREPROD for API)
+      // The API expects 'Preprod' or 'Mainnet' (capitalized, not all caps)
+      let networkValue = filters?.network || 'Preprod';
+      // Convert PREPROD -> Preprod, MAINNET -> Mainnet
+      if (networkValue === 'PREPROD' || networkValue === 'PRE-PROD') {
+        networkValue = 'Preprod';
+      } else if (networkValue === 'MAINNET' || networkValue === 'MAIN-NET') {
+        networkValue = 'Mainnet';
+      }
+      params.append('network', networkValue);
       if (filters?.agentName) {
         params.append('agentName', filters.agentName);
       }
@@ -265,20 +302,48 @@ export class MasumiClient {
         params.append('status', filters.status);
       }
 
-      const url = `${this.registryServiceUrl}/registry/${params.toString() ? '?' + params.toString() : ''}`;
+      // Registry endpoint is on Payment Service, not Registry Service
+      const url = `${this.paymentServiceUrl}/registry?${params.toString()}`;
+      
+      // Debug: Check if API key is available
+      if (!this.apiKey) {
+        console.error('❌ Masumi API key is missing!');
+        console.error('   Check your .env file has: MASUMI_API_KEY=this_should_be_very_secure_and_at_least_15_chars');
+        console.error('   Then restart Expo with: npm run start:go -- --clear');
+        throw new Error('Masumi API key is required for agent queries');
+      }
+      
+      console.log(`🔍 Querying agents from: ${url}`);
+      console.log(`🔑 Using API key: ${this.apiKey.substring(0, 20)}...`);
+      
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'token': this.apiKey,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to query agents: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to query agents: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
-      return data.agents || [];
+      
+      // Response format: { status: 'success', data: { Assets: [...] } }
+      const assets = data?.data?.Assets || data?.Assets || [];
+      
+      // Map to MasumiAgent format
+      return assets.map((asset: any) => ({
+        agentId: asset.id,
+        agentName: asset.name,
+        description: asset.description,
+        version: asset.Capability?.version,
+        status: asset.state === 'RegistrationRequested' || asset.state === 'Registered' ? 'active' : 'inactive',
+        endpoint: asset.apiBaseUrl,
+        nftTokenId: asset.agentIdentifier,
+      })) as MasumiAgent[];
     } catch (error) {
       console.error('Failed to query agents from Masumi:', error);
       return [];

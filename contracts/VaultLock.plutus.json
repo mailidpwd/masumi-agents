@@ -1,0 +1,32 @@
+{
+  "validators": [
+    {
+      "title": "VaultLock",
+      "description": "Vault token locking (personal, generational, institutional)",
+      "compiledCode": "4e4d0100ff0000",
+      "hash": "placeholder_hash_vaultlock",
+      "version": "V2"
+    }
+  ],
+  "types": {
+    "TokenAmount": {
+      "ada": "Integer",
+      "rdmToken": "Maybe Integer"
+    },
+    "VaultType": ["PersonalVault", "GenerationalVault", "InstitutionalVault"],
+    "VaultLockDatum": {
+      "vaultId": "BuiltinByteString",
+      "creatorId": "BuiltinByteString",
+      "beneficiaryId": "BuiltinByteString",
+      "vaultType": "VaultType",
+      "lockedAmount": "TokenAmount",
+      "lockDuration": "Integer",
+      "lockStartDate": "POSIXTime",
+      "lockEndDate": "POSIXTime",
+      "minLockAmount": "Integer"
+    },
+    "VaultRedeemer": ["LockVault", "UnlockVault", "PartialUnlock Integer"]
+  },
+  "note": "This is a placeholder. Replace with actual compiled contract code after compilation."
+}
+

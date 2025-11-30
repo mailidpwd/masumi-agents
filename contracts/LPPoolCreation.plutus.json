@@ -1,0 +1,30 @@
+{
+  "validators": [
+    {
+      "title": "LPPoolCreation",
+      "description": "Liquidity pool creation (RDM + HabitNFT)",
+      "compiledCode": "4e4d0100ff0000",
+      "hash": "placeholder_hash_lppoolcreation",
+      "version": "V2"
+    }
+  ],
+  "types": {
+    "TokenAmount": {
+      "ada": "Integer",
+      "rdmToken": "Maybe Integer"
+    },
+    "LPPoolDatum": {
+      "poolId": "BuiltinByteString",
+      "creatorId": "BuiltinByteString",
+      "creatorRating": "Integer",
+      "habitNFTId": "BuiltinByteString",
+      "initialStake": "TokenAmount",
+      "totalShares": "Integer",
+      "createdAt": "POSIXTime",
+      "ratingThreshold": "Integer"
+    },
+    "LPPoolRedeemer": ["CreatePool", "ClosePool", "UpdatePool"]
+  },
+  "note": "This is a placeholder. Replace with actual compiled contract code after compilation."
+}
+
